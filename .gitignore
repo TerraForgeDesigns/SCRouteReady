@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+
+# Production and generated output
+dist/
+coverage/
+.vite/
+*.tsbuildinfo
+.test-dist/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Route exports and spreadsheet-like data
+*.xlsx
+*.xls
+*.xlsm
+*.xlsb
+*.csv
+*.ods
+
+# Generated print/export artifacts
+*.pdf
+
+# Temporary/editor files
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local editor state
+.vscode/settings.json
+.vscode/*.log

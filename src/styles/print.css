@@ -1,0 +1,217 @@
+/*
+  SCRouteReady print foundation.
+
+  Pull Sheet and ABC Key output is landscape-only, spreadsheet-like, and designed
+  for readable compact body text. Do not solve page-width issues by shrinking
+  printed text below practical route-pulling readability.
+*/
+
+@media print {
+  @page {
+    size: letter landscape;
+    margin: 0.25in;
+  }
+
+  .app-header,
+  .workflow,
+  .drop-zone,
+  .security-notice,
+  .status-panel,
+  .action-bar,
+  .preview-toolbar,
+  .generation-summary {
+    display: none;
+  }
+
+  body {
+    background: #ffffff;
+  }
+
+  .app-shell {
+    max-width: none;
+    padding: 0;
+  }
+
+  .workspace-grid,
+  .primary-column {
+    display: block;
+  }
+
+  .secondary-column {
+    display: none;
+  }
+
+  .print-document {
+    display: block;
+    gap: 0;
+  }
+
+  .preview-page {
+    overflow: visible;
+    height: auto;
+    min-height: 0;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    aspect-ratio: auto;
+    break-inside: auto;
+    page-break-inside: auto;
+  }
+
+  .new-print-page {
+    break-before: page;
+    page-break-before: always;
+  }
+
+  .print-page-header,
+  .pallet-key-header {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.12in;
+    min-height: 0;
+    padding: 0 0 0.05in;
+    border-bottom: 1.5pt solid #1d344a;
+    background: #ffffff;
+  }
+
+  .print-logo {
+    width: 1.45in;
+    max-width: 1.45in;
+  }
+
+  .route-title-block {
+    flex: 1 1 auto;
+  }
+
+  .route-title-block h3 {
+    font-size: 13pt;
+    line-height: 1;
+  }
+
+  .route-title-block p,
+  .route-summary {
+    font-size: 9.5pt;
+    line-height: 1.05;
+  }
+
+  .route-summary {
+    flex: 0 0 auto;
+    max-width: 2.5in;
+    text-align: right;
+  }
+
+  .pull-sheet-table {
+    font-size: 9pt;
+    line-height: 1.12;
+    width: 100%;
+    max-width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .pull-sheet-table thead {
+    display: table-header-group;
+  }
+
+  .pallet-key-entry {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .pull-sheet-table tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .pull-sheet-table tbody tr.first-key-group-row td {
+    border-top: 1.5pt solid #000000;
+  }
+
+  .stop-banner-row {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  .pull-sheet-table th,
+  .pull-sheet-table td {
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+    border-color: #000000;
+    padding: 2pt 3pt;
+  }
+
+  .pull-sheet-table .header-cell {
+    background: #f2f2f2;
+    color: #000000;
+    overflow: hidden;
+    padding: 2pt 3pt;
+    font-size: 8.8pt;
+    line-height: 1.05;
+    text-align: center;
+    vertical-align: middle;
+    white-space: normal;
+    overflow-wrap: normal;
+    word-break: normal;
+  }
+
+  .pull-sheet-table .body-cell {
+    background: #ffffff;
+    color: #000000;
+    font-size: 9pt;
+    line-height: 1.12;
+    vertical-align: middle;
+  }
+
+  .pull-sheet-table tbody .column-stopDisplay {
+    background: var(--stop-primary);
+    color: var(--stop-fg);
+  }
+
+  .pull-sheet-table tbody .column-keyDesignation.key-shade-1 {
+    background: var(--key-shade-1);
+    color: var(--key-fg-1);
+  }
+
+  .pull-sheet-table tbody .column-keyDesignation.key-shade-2 {
+    background: var(--key-shade-2);
+    color: var(--key-fg-2);
+  }
+
+  .pull-sheet-table tbody .column-keyDesignation.key-shade-3 {
+    background: var(--key-shade-3);
+    color: var(--key-fg-3);
+  }
+
+  .pull-sheet-table tbody .column-keyDesignation.key-shade-4 {
+    background: var(--key-shade-4);
+    color: var(--key-fg-4);
+  }
+
+  .pull-sheet-table .stop-banner-cell {
+    background: var(--stop-primary);
+    color: var(--stop-fg);
+    padding: 2.5pt 4pt;
+    font-size: 10pt;
+    line-height: 1.1;
+  }
+
+  .pallet-key-page {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .pallet-key-entry {
+    background: #ffffff;
+    border-color: #000000;
+  }
+
+  .pallet-key-entry h4,
+  .pallet-key-entry p {
+    color: #000000;
+  }
+}
