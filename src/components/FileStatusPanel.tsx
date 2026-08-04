@@ -1,15 +1,16 @@
-import type { WorkbookMetadata, WorkbookReadError } from '../types/workbook';
 import type { PullSheetGenerationError } from '../types/pullSheet';
+import type { ActiveWorkbookSession, ReportKind, WorkbookReadError } from '../types/workbook';
 import { formatFileSize } from '../utils/formatFileSize';
 
 interface FileStatusPanelProps {
-  metadata: WorkbookMetadata | null;
+  reports: ActiveWorkbookSession[];
   error: WorkbookReadError | null;
   generationError: PullSheetGenerationError | null;
+  onRemoveReport: (kind: ReportKind) => void;
 }
 
-export function FileStatusPanel({ metadata, error, generationError }: FileStatusPanelProps) {
-  if (error) {
+export function FileStatusPanel({ reports, error, generationError, onRemoveReport }: FileStatusPanelProps) {
+  if (error && reports.length === 0) {
     return (
       <section className="status-panel error-panel" aria-labelledby="status-title">
         <p className="status-kicker">Needs attention</p>
@@ -41,12 +42,12 @@ export function FileStatusPanel({ metadata, error, generationError }: FileStatus
     );
   }
 
-  if (!metadata) {
+  if (reports.length === 0) {
     return (
       <section className="status-panel" aria-labelledby="status-title">
         <p className="status-kicker">Waiting</p>
-        <h2 id="status-title">No route file selected</h2>
-        <p>Select the P21 Results export to begin.</p>
+        <h2 id="status-title">No staging reports selected</h2>
+        <p>Select a Sales Order report, a Transfer report, or both matching reports.</p>
       </section>
     );
   }
@@ -54,34 +55,65 @@ export function FileStatusPanel({ metadata, error, generationError }: FileStatus
   return (
     <section className="status-panel success-panel" aria-labelledby="status-title">
       <p className="status-kicker">Workbook ready</p>
-      <h2 id="status-title">P21 Results export read locally</h2>
-      <dl className="metadata-grid">
-        <div>
-          <dt>File name</dt>
-          <dd>{metadata.originalFileName}</dd>
-        </div>
-        <div>
-          <dt>File size</dt>
-          <dd>{formatFileSize(metadata.fileSize)}</dd>
-        </div>
-        <div>
-          <dt>Worksheets</dt>
-          <dd>{metadata.worksheetNames.length}</dd>
-        </div>
-        <div>
-          <dt>Results rows</dt>
-          <dd>{metadata.resultsRowCount}</dd>
-        </div>
-        <div>
-          <dt>Results columns</dt>
-          <dd>{metadata.resultsColumnCount}</dd>
-        </div>
-      </dl>
+      <h2 id="status-title">{getStatusTitle(reports)}</h2>
+      {error ? <p className="inline-error">{error.message}</p> : null}
+      <div className="loaded-report-list">
+        {reports.map((report) => (
+          <article className="loaded-report" key={report.id}>
+            <div>
+              <strong>{getReportLabel(report.reportKind)}</strong>
+              <span>{report.fileName}</span>
+            </div>
+            <dl className="metadata-grid compact">
+              <div>
+                <dt>Rows</dt>
+                <dd>{report.metadata.resultsRowCount}</dd>
+              </div>
+              <div>
+                <dt>Stops</dt>
+                <dd>{report.metadata.stopCount}</dd>
+              </div>
+              <div>
+                <dt>Routes</dt>
+                <dd>{report.metadata.routeCount}</dd>
+              </div>
+              <div>
+                <dt>Size</dt>
+                <dd>{formatFileSize(report.metadata.fileSize)}</dd>
+              </div>
+            </dl>
+            <button type="button" className="remove-report-button" onClick={() => onRemoveReport(report.reportKind)}>
+              Remove {getReportLabel(report.reportKind)}
+            </button>
+          </article>
+        ))}
+      </div>
+      {reports.length === 1 ? <p className="muted">{getAddOtherMessage(reports[0].reportKind)}</p> : null}
       <ul className="confirmation-list">
-        <li>Workbook read locally in this browser.</li>
-        <li>Route data was not transmitted.</li>
-        <li>The next stage will generate the temporary print document.</li>
+        <li>Workbook data is held temporarily in this browser.</li>
+        <li>The next stage will generate one combined print document.</li>
       </ul>
     </section>
   );
+}
+
+function getStatusTitle(reports: ActiveWorkbookSession[]): string {
+  const hasSales = reports.some((report) => report.reportKind === 'sales');
+  const hasTransfer = reports.some((report) => report.reportKind === 'transfer');
+
+  if (hasSales && hasTransfer) {
+    return 'Mixed Sales / Transfer route ready';
+  }
+
+  return hasSales ? 'Sales Order report ready' : 'Transfer report ready';
+}
+
+function getReportLabel(kind: ReportKind): string {
+  return kind === 'sales' ? 'Sales Report' : 'Transfer Report';
+}
+
+function getAddOtherMessage(kind: ReportKind): string {
+  return kind === 'sales'
+    ? 'You may generate now or add the matching Transfer report.'
+    : 'You may generate now or add the matching Sales report.';
 }

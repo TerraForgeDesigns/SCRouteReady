@@ -1,13 +1,13 @@
 import { useCallback, useRef, useState } from 'react';
-import { generatePullSheetDocument } from '../services/pullSheetGenerator';
+import { generatePullSheetDocumentFromSessions } from '../services/pullSheetGenerator';
 import { readWorkbookSession, WorkbookReaderError } from '../services/workbookReader';
 import { PullSheetGenerationError, type PullSheetDocument } from '../types/pullSheet';
-import type { ActiveWorkbookSession, ApplicationState, WorkbookMetadata, WorkbookReadError } from '../types/workbook';
+import type { ActiveWorkbookSession, ApplicationState, ReportKind, WorkbookReadError } from '../types/workbook';
 import { validateFileSelection } from '../utils/fileValidation';
 
 interface WorkbookSessionState {
   appState: ApplicationState;
-  metadata: WorkbookMetadata | null;
+  reports: ActiveWorkbookSession[];
   error: WorkbookReadError | null;
   generationError: PullSheetGenerationError | null;
   generatedDocument: PullSheetDocument | null;
@@ -16,22 +16,22 @@ interface WorkbookSessionState {
 }
 
 export function useWorkbookSession() {
-  const activeSessionRef = useRef<ActiveWorkbookSession | null>(null);
+  const activeSessionsRef = useRef<ActiveWorkbookSession[]>([]);
   const [state, setState] = useState<WorkbookSessionState>({
     appState: 'idle',
-    metadata: null,
+    reports: [],
     error: null,
     generationError: null,
     generatedDocument: null,
-    announcement: 'No route file selected',
+    announcement: 'No staging reports selected',
     hasActiveSession: false,
   });
 
   const clearSession = useCallback((announcement = 'Active session cleared') => {
-    activeSessionRef.current = null;
+    activeSessionsRef.current = [];
     setState({
       appState: 'idle',
-      metadata: null,
+      reports: [],
       error: null,
       generationError: null,
       generatedDocument: null,
@@ -45,13 +45,12 @@ export function useWorkbookSession() {
       return;
     }
 
-    activeSessionRef.current = null;
     const validation = validateFileSelection(files);
 
     if (!validation.valid) {
       setState({
         appState: 'error',
-        metadata: null,
+        reports: activeSessionsRef.current,
         error: {
           code: validation.errorCode ?? 'UNEXPECTED_PARSE_ERROR',
           message: validation.message ?? 'The selected file could not be validated.',
@@ -64,16 +63,16 @@ export function useWorkbookSession() {
       return;
     }
 
-    const file = files?.[0];
+    const selectedFiles = Array.from(files ?? []);
 
-    if (!file) {
+    if (selectedFiles.length === 0) {
       setState({
         appState: 'error',
-        metadata: null,
+        reports: activeSessionsRef.current,
         error: { code: 'NO_FILE', message: 'No file selected. Choose a P21 Results export to begin.' },
         generationError: null,
         generatedDocument: null,
-        announcement: 'No file selected. Choose a P21 Results export to begin.',
+        announcement: 'No file selected. Choose a P21 Staging Report to begin.',
         hasActiveSession: true,
       });
       return;
@@ -81,32 +80,43 @@ export function useWorkbookSession() {
 
     setState({
       appState: 'reading',
-      metadata: null,
+      reports: activeSessionsRef.current,
       error: null,
       generationError: null,
       generatedDocument: null,
-      announcement: 'Reading workbook locally...',
+      announcement: selectedFiles.length === 1 ? 'Reading workbook locally...' : 'Reading workbooks locally...',
       hasActiveSession: true,
     });
 
     try {
-      const session = await readWorkbookSession(file);
-      activeSessionRef.current = session;
+      const newSessions = await Promise.all(selectedFiles.map((file) => readWorkbookSession(file)));
+      const duplicateKind = findDuplicateKind(newSessions);
+
+      if (duplicateKind) {
+        throw new WorkbookReaderError(
+          'DUPLICATE_REPORT_KIND',
+          duplicateKind === 'sales'
+            ? 'Two Sales Order reports were selected. Choose one Sales report and, if needed, one matching Transfer report.'
+            : 'Two Transfer reports were selected. Choose one Transfer report and, if needed, one matching Sales report.',
+        );
+      }
+
+      const mergedSessions = mergeSessionsByKind(activeSessionsRef.current, newSessions);
+      activeSessionsRef.current = mergedSessions;
       setState({
         appState: 'ready',
-        metadata: session.metadata,
+        reports: mergedSessions,
         error: null,
         generationError: null,
         generatedDocument: null,
-        announcement: 'Workbook read locally. Generate Pull Sheet is available.',
+        announcement: getReadyAnnouncement(mergedSessions),
         hasActiveSession: true,
       });
     } catch (error) {
-      activeSessionRef.current = null;
       const workbookError = normalizeWorkbookError(error);
       setState({
-        appState: 'error',
-        metadata: null,
+        appState: activeSessionsRef.current.length > 0 ? 'ready' : 'error',
+        reports: activeSessionsRef.current,
         error: workbookError,
         generationError: null,
         generatedDocument: null,
@@ -116,14 +126,28 @@ export function useWorkbookSession() {
     }
   }, [state.appState]);
 
+  const removeReport = useCallback((kind: ReportKind) => {
+    const remainingSessions = activeSessionsRef.current.filter((session) => session.reportKind !== kind);
+    activeSessionsRef.current = remainingSessions;
+    setState({
+      appState: remainingSessions.length > 0 ? 'ready' : 'idle',
+      reports: remainingSessions,
+      error: null,
+      generationError: null,
+      generatedDocument: null,
+      announcement: remainingSessions.length > 0 ? getReadyAnnouncement(remainingSessions) : 'Report removed. No staging reports selected.',
+      hasActiveSession: remainingSessions.length > 0,
+    });
+  }, []);
+
   const generatePullSheet = useCallback(async () => {
     if (state.appState === 'generating') {
       return;
     }
 
-    const activeSession = activeSessionRef.current;
+    const activeSessions = activeSessionsRef.current;
 
-    if (!activeSession) {
+    if (activeSessions.length === 0) {
       return;
     }
 
@@ -138,7 +162,7 @@ export function useWorkbookSession() {
     await Promise.resolve();
 
     try {
-      const generatedDocument = generatePullSheetDocument(activeSession.workbook);
+      const generatedDocument = generatePullSheetDocumentFromSessions(activeSessions);
       setState((current) => ({
         ...current,
         appState: 'preview',
@@ -166,7 +190,7 @@ export function useWorkbookSession() {
 
       return {
         ...current,
-        appState: isDragging ? 'dragging' : current.generatedDocument ? 'preview' : current.metadata ? 'ready' : current.error ? 'error' : 'idle',
+        appState: isDragging ? 'dragging' : current.generatedDocument ? 'preview' : current.reports.length > 0 ? 'ready' : current.error ? 'error' : 'idle',
       };
     });
   }, []);
@@ -176,8 +200,57 @@ export function useWorkbookSession() {
     clearSession,
     generatePullSheet,
     readSelectedFiles,
+    removeReport,
     setDragging,
   };
+}
+
+function findDuplicateKind(sessions: ActiveWorkbookSession[]): ReportKind | null {
+  const seen = new Set<ReportKind>();
+
+  for (const session of sessions) {
+    if (seen.has(session.reportKind)) {
+      return session.reportKind;
+    }
+
+    seen.add(session.reportKind);
+  }
+
+  return null;
+}
+
+function mergeSessionsByKind(
+  currentSessions: ActiveWorkbookSession[],
+  newSessions: ActiveWorkbookSession[],
+): ActiveWorkbookSession[] {
+  const sessionMap = new Map<ReportKind, ActiveWorkbookSession>();
+
+  for (const session of currentSessions) {
+    sessionMap.set(session.reportKind, session);
+  }
+
+  for (const session of newSessions) {
+    sessionMap.set(session.reportKind, session);
+  }
+
+  return (['sales', 'transfer'] as const)
+    .map((kind) => sessionMap.get(kind))
+    .filter((session): session is ActiveWorkbookSession => Boolean(session));
+}
+
+function getReadyAnnouncement(sessions: ActiveWorkbookSession[]): string {
+  const hasSales = sessions.some((session) => session.reportKind === 'sales');
+  const hasTransfer = sessions.some((session) => session.reportKind === 'transfer');
+
+  if (hasSales && hasTransfer) {
+    return 'Mixed Sales / Transfer route ready. Generate Pull Sheet is available.';
+  }
+
+  if (hasSales) {
+    return 'Sales Order report ready. You may generate now or add the matching Transfer report.';
+  }
+
+  return 'Transfer report ready. You may generate now or add the matching Sales report.';
 }
 
 function normalizeWorkbookError(error: unknown): WorkbookReadError {

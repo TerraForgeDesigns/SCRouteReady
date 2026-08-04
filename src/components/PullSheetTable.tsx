@@ -24,11 +24,18 @@ export function PullSheetTable({ route }: PullSheetTableProps) {
       </thead>
       <tbody>
         {route.rows.map((row) => (
-          <Fragment key={`${row.sourceIndex}-${row.pickTicketNo}-${row.dmasPart}`}>
+          <Fragment key={`${row.sourceKind}-${row.sourceIndex}-${row.pickTicketNo}-${row.dmasPart}-${row.p21ItemId}`}>
             {row.stopBanner ? (
               <tr className={`stop-banner-row ${row.stopBanner.stopColorClass}`}>
                 <th className="stop-banner-cell" colSpan={route.columns.length} scope="rowgroup">
                   {row.stopBanner.text}
+                </th>
+              </tr>
+            ) : null}
+            {row.sourceDividerLabel ? (
+              <tr className="source-divider-row">
+                <th className="source-divider-cell" colSpan={route.columns.length} scope="rowgroup">
+                  {row.sourceDividerLabel}
                 </th>
               </tr>
             ) : null}
@@ -59,7 +66,7 @@ function getRecordValue(row: PullSheetRecord, key: string): string {
     case 'customerType':
       return row.customerType;
     case 'pickTicketNo':
-      return row.pickTicketNo;
+      return row.documentNumberDisplay;
     case 'poNo':
       return row.poNo;
     case 'qty':

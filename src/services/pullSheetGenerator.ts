@@ -11,13 +11,14 @@ import type {
   StopBanner,
 } from '../types/pullSheet';
 import { PullSheetGenerationError } from '../types/pullSheet';
+import type { ActiveWorkbookSession, ReportKind } from '../types/workbook';
 import { compareDesignations, getDesignationLetter, getKeyShadeClass } from '../utils/designationLetters';
 import { normalizeHeader } from '../utils/headerNormalization';
 import { compareNaturalText, parseSortableNumber } from '../utils/naturalSort';
 import { normalizeComparableText, sanitizeDisplayText } from '../utils/sanitizeDisplayText';
 import { getStopColorClass } from '../utils/stopColors';
 
-const REQUIRED_COLUMNS: SourceColumnDefinition[] = [
+const SALES_COLUMNS: SourceColumnDefinition[] = [
   { field: 'routeFromDescartes', sourceHeader: 'Route from Descartes', displayLabel: 'Route from Descartes', required: true },
   { field: 'customerType', sourceHeader: 'Customer Type', displayLabel: 'Customer Type', required: true },
   { field: 'stopNumber', sourceHeader: 'Stop #', displayLabel: 'Stop #', required: true },
@@ -34,10 +35,22 @@ const REQUIRED_COLUMNS: SourceColumnDefinition[] = [
   { field: 'shipToState', sourceHeader: 'Ship To State', displayLabel: 'State', required: true },
 ];
 
+const TRANSFER_COLUMNS: SourceColumnDefinition[] = [
+  { field: 'routeFromDescartes', sourceHeader: 'Route from Descartes', displayLabel: 'Route from Descartes', required: true },
+  { field: 'assignedStop', sourceHeader: 'Assigned Stop', displayLabel: 'Assigned Stop', required: true },
+  { field: 'transferNo', sourceHeader: 'Transfer No', displayLabel: 'Transfer No', required: true },
+  { field: 'qty', sourceHeader: 'Qty', displayLabel: 'Qty', required: true },
+  { field: 'unitOfMeasure', sourceHeader: 'Unit of Measure', displayLabel: 'Unit of Measure', required: true },
+  { field: 'binCd', sourceHeader: 'Bin Cd', displayLabel: 'Bin Cd', required: true },
+  { field: 'itemId', sourceHeader: 'Item Id', displayLabel: 'Item Id', required: true },
+  { field: 'itemDescription', sourceHeader: 'Item Desc', displayLabel: 'Item Desc', required: true },
+  { field: 'toLocationName', sourceHeader: 'To Location Name', displayLabel: 'To Location Name', required: true },
+];
+
 const BASE_COLUMNS: PullSheetColumn[] = [
   { key: 'stopDisplay', label: 'Stop', className: 'column-stopDisplay', widthPercent: 4.5, align: 'center', wrap: 'nowrap' },
   { key: 'customerType', label: 'Type', className: 'column-customerType', widthPercent: 6.5, align: 'center', wrap: 'nowrap' },
-  { key: 'pickTicketNo', label: 'Pick Ticket', className: 'column-pickTicketNo', widthPercent: 11, align: 'center', wrap: 'nowrap' },
+  { key: 'pickTicketNo', label: 'PT/Xfer #', className: 'column-pickTicketNo', widthPercent: 11, align: 'center', wrap: 'nowrap' },
   { key: 'poNo', label: 'PO No.', className: 'column-poNo', widthPercent: 10, align: 'center', wrap: 'nowrap' },
   { key: 'qty', label: 'Qty', className: 'column-qty', widthPercent: 4, align: 'right', wrap: 'nowrap' },
   { key: 'uom', label: 'UOM', className: 'column-uom', widthPercent: 5, align: 'center', wrap: 'nowrap' },
@@ -70,7 +83,7 @@ const KEYED_COLUMN_WIDTHS = new Map<string, number>([
   ['itemDescription', 30],
 ]);
 
-type ColumnIndexMap = Record<SourceField, number>;
+type ColumnIndexMap = Partial<Record<SourceField, number>>;
 type RawRow = string[];
 
 interface StopCustomer {
@@ -86,7 +99,41 @@ interface StopAssignment {
   customers: StopCustomer[];
 }
 
+interface ParsedReport {
+  kind: ReportKind;
+  records: PullSheetRecord[];
+}
+
 export function generatePullSheetDocument(workbook: unknown): PullSheetDocument {
+  return buildDocument([readReport(workbook, 'sales')]);
+}
+
+export function generatePullSheetDocumentFromSessions(sessions: readonly ActiveWorkbookSession[]): PullSheetDocument {
+  if (sessions.length === 0) {
+    throw new PullSheetGenerationError('NO_USABLE_DATA_ROWS', 'No valid reports are loaded.');
+  }
+
+  const reports = sessions.map((session) => readReport(session.workbook, session.reportKind));
+  validateRouteCompatibility(reports);
+  return buildDocument(reports);
+}
+
+function readReport(workbook: unknown, kind: ReportKind): ParsedReport {
+  const { headerRow, dataRows } = readResultsRows(workbook);
+  const columnMap = buildColumnMap(headerRow, kind === 'sales' ? SALES_COLUMNS : TRANSFER_COLUMNS);
+  const records = kind === 'sales'
+    ? convertSalesRows(dataRows, columnMap)
+    : convertTransferRows(dataRows, columnMap);
+  const usableRecords = records.filter((record) => hasUsableData(record));
+
+  if (usableRecords.length === 0) {
+    throw new PullSheetGenerationError('NO_USABLE_DATA_ROWS', 'The Results worksheet does not contain usable data rows.');
+  }
+
+  return { kind, records: usableRecords };
+}
+
+function readResultsRows(workbook: unknown): { headerRow: RawRow; dataRows: RawRow[] } {
   try {
     const typedWorkbook = assertWorkbook(workbook);
     const sheetName = typedWorkbook.SheetNames.find((name) => name.toLowerCase() === 'results');
@@ -109,14 +156,7 @@ export function generatePullSheetDocument(workbook: unknown): PullSheetDocument 
       throw new PullSheetGenerationError('NO_USABLE_DATA_ROWS', 'The Results worksheet does not contain usable data rows.');
     }
 
-    const columnMap = buildColumnMap(headerRow);
-    const records = convertRows(dataRows, columnMap).filter((record) => hasUsableData(record));
-
-    if (records.length === 0) {
-      throw new PullSheetGenerationError('NO_USABLE_DATA_ROWS', 'The Results worksheet does not contain usable data rows.');
-    }
-
-    return buildDocument(records);
+    return { headerRow, dataRows };
   } catch (error) {
     if (error instanceof PullSheetGenerationError) {
       throw error;
@@ -158,7 +198,7 @@ function extractRows(sheet: XLSX.WorkSheet, range: XLSX.Range): RawRow[] {
   return rows;
 }
 
-function buildColumnMap(headerRow: RawRow): ColumnIndexMap {
+function buildColumnMap(headerRow: RawRow, columns: SourceColumnDefinition[]): ColumnIndexMap {
   const normalizedHeaderIndexes = new Map<string, number>();
 
   headerRow.forEach((header, index) => {
@@ -170,9 +210,9 @@ function buildColumnMap(headerRow: RawRow): ColumnIndexMap {
   });
 
   const missingColumns: string[] = [];
-  const map = {} as Partial<ColumnIndexMap>;
+  const map: ColumnIndexMap = {};
 
-  for (const column of REQUIRED_COLUMNS) {
+  for (const column of columns) {
     const index = normalizedHeaderIndexes.get(normalizeHeader(column.sourceHeader));
 
     if (index === undefined) {
@@ -190,49 +230,128 @@ function buildColumnMap(headerRow: RawRow): ColumnIndexMap {
     );
   }
 
-  return map as ColumnIndexMap;
+  return map;
 }
 
-function convertRows(rows: RawRow[], columnMap: ColumnIndexMap): PullSheetRecord[] {
+function convertSalesRows(rows: RawRow[], columnMap: ColumnIndexMap): PullSheetRecord[] {
   return rows.map((row, index) => {
-    const routeDisplay = getCell(row, columnMap.routeFromDescartes);
-    const stopDisplay = getCell(row, columnMap.stopNumber);
-    const pickTicketNo = getCell(row, columnMap.pickTicketNo);
-    const shipToName = getCell(row, columnMap.shipToName);
+    const routeDisplay = getRequiredCell(row, columnMap, 'routeFromDescartes');
+    const stopDisplay = getRequiredCell(row, columnMap, 'stopNumber');
+    const pickTicketNo = getRequiredCell(row, columnMap, 'pickTicketNo');
+    const shipToName = getRequiredCell(row, columnMap, 'shipToName');
 
-    return {
+    return createRecord({
+      sourceKind: 'sales',
       sourceIndex: index,
-      routeKey: normalizeRouteKey(routeDisplay),
       routeDisplay,
-      customerType: getCell(row, columnMap.customerType),
-      stopKey: normalizeStopKey(stopDisplay),
+      customerType: getRequiredCell(row, columnMap, 'customerType'),
       stopDisplay,
-      stopSortValue: parseSortableNumber(stopDisplay),
-      pickTicketNo,
-      pickTicketSortValue: parseSortableNumber(pickTicketNo),
-      poNo: getCell(row, columnMap.poNo),
-      qty: getCell(row, columnMap.qty),
-      uom: getCell(row, columnMap.uom),
-      bin: getCell(row, columnMap.bin),
-      dmasPart: getCell(row, columnMap.dmasPart),
-      p21ItemId: getCell(row, columnMap.p21ItemId),
-      itemDescription: getCell(row, columnMap.itemDescription),
+      documentNumberDisplay: pickTicketNo,
+      poNo: getRequiredCell(row, columnMap, 'poNo'),
+      qty: getRequiredCell(row, columnMap, 'qty'),
+      uom: getRequiredCell(row, columnMap, 'uom'),
+      bin: getRequiredCell(row, columnMap, 'bin'),
+      dmasPart: getRequiredCell(row, columnMap, 'dmasPart'),
+      p21ItemId: getRequiredCell(row, columnMap, 'p21ItemId'),
+      itemDescription: getRequiredCell(row, columnMap, 'itemDescription'),
       shipToName,
-      shipToNameKey: normalizeComparableText(shipToName),
-      shipToCity: getCell(row, columnMap.shipToCity),
-      shipToState: getCell(row, columnMap.shipToState),
-      keyDesignation: '',
-      keyShadeClass: '',
-      stopColorClass: '',
-      isFirstRowForStop: false,
-      isFirstRowForKeyGroup: false,
-      stopBanner: null,
-    };
+      shipToCity: getRequiredCell(row, columnMap, 'shipToCity'),
+      shipToState: getRequiredCell(row, columnMap, 'shipToState'),
+      transferDestinationName: '',
+    });
   });
 }
 
-function getCell(row: RawRow, index: number): string {
-  return sanitizeDisplayText(row[index] ?? '');
+function convertTransferRows(rows: RawRow[], columnMap: ColumnIndexMap): PullSheetRecord[] {
+  return rows.map((row, index) => {
+    const routeDisplay = getRequiredCell(row, columnMap, 'routeFromDescartes');
+    const stopDisplay = getRequiredCell(row, columnMap, 'assignedStop');
+    const transferNo = getRequiredCell(row, columnMap, 'transferNo');
+    const toLocationName = getRequiredCell(row, columnMap, 'toLocationName');
+
+    return createRecord({
+      sourceKind: 'transfer',
+      sourceIndex: index,
+      routeDisplay,
+      customerType: 'Xfer',
+      stopDisplay,
+      documentNumberDisplay: transferNo,
+      poNo: '',
+      qty: getRequiredCell(row, columnMap, 'qty'),
+      uom: getRequiredCell(row, columnMap, 'unitOfMeasure'),
+      bin: getRequiredCell(row, columnMap, 'binCd'),
+      dmasPart: '',
+      p21ItemId: getRequiredCell(row, columnMap, 'itemId'),
+      itemDescription: getRequiredCell(row, columnMap, 'itemDescription'),
+      shipToName: '',
+      shipToCity: '',
+      shipToState: '',
+      transferDestinationName: toLocationName,
+    });
+  });
+}
+
+function createRecord(values: {
+  sourceKind: ReportKind;
+  sourceIndex: number;
+  routeDisplay: string;
+  customerType: string;
+  stopDisplay: string;
+  documentNumberDisplay: string;
+  poNo: string;
+  qty: string;
+  uom: string;
+  bin: string;
+  dmasPart: string;
+  p21ItemId: string;
+  itemDescription: string;
+  shipToName: string;
+  shipToCity: string;
+  shipToState: string;
+  transferDestinationName: string;
+}): PullSheetRecord {
+  const stopSortValue = parseSortableNumber(values.stopDisplay);
+
+  return {
+    sourceKind: values.sourceKind,
+    sourceIndex: values.sourceIndex,
+    originalSourceOrder: values.sourceIndex,
+    routeKey: normalizeRouteKey(values.routeDisplay),
+    routeDisplay: values.routeDisplay,
+    customerType: values.customerType,
+    stopKey: normalizeStopKey(values.stopDisplay),
+    stopDisplay: values.stopDisplay,
+    stopSortValue,
+    pickTicketNo: values.documentNumberDisplay,
+    pickTicketSortValue: parseSortableNumber(values.documentNumberDisplay),
+    documentNumberDisplay: values.documentNumberDisplay,
+    documentNumberSortValue: parseSortableNumber(values.documentNumberDisplay),
+    poNo: values.poNo,
+    qty: values.qty,
+    uom: values.uom,
+    bin: values.bin,
+    dmasPart: values.dmasPart,
+    p21ItemId: values.p21ItemId,
+    itemDescription: values.itemDescription,
+    shipToName: values.shipToName,
+    shipToNameKey: normalizeComparableText(values.shipToName),
+    shipToCity: values.shipToCity,
+    shipToState: values.shipToState,
+    transferDestinationName: values.transferDestinationName,
+    transferDestinationKey: normalizeComparableText(values.transferDestinationName),
+    keyDesignation: '',
+    keyShadeClass: '',
+    stopColorClass: '',
+    isFirstRowForStop: false,
+    isFirstRowForKeyGroup: false,
+    stopBanner: null,
+    sourceDividerLabel: '',
+  };
+}
+
+function getRequiredCell(row: RawRow, columnMap: ColumnIndexMap, field: SourceField): string {
+  const index = columnMap[field];
+  return index === undefined ? '' : sanitizeDisplayText(row[index] ?? '');
 }
 
 function hasUsableData(record: PullSheetRecord): boolean {
@@ -240,21 +359,44 @@ function hasUsableData(record: PullSheetRecord): boolean {
     record.routeDisplay,
     record.customerType,
     record.stopDisplay,
-    record.pickTicketNo,
-    record.poNo,
+    record.documentNumberDisplay,
     record.qty,
     record.uom,
     record.bin,
-    record.dmasPart,
     record.p21ItemId,
     record.itemDescription,
     record.shipToName,
-    record.shipToCity,
-    record.shipToState,
+    record.transferDestinationName,
   ].some((value) => value.length > 0);
 }
 
-function buildDocument(records: PullSheetRecord[]): PullSheetDocument {
+function validateRouteCompatibility(reports: ParsedReport[]): void {
+  if (reports.length !== 2) {
+    return;
+  }
+
+  const salesReport = reports.find((report) => report.kind === 'sales');
+  const transferReport = reports.find((report) => report.kind === 'transfer');
+
+  if (!salesReport || !transferReport) {
+    return;
+  }
+
+  const salesRoutes = getSortedRouteKeys(salesReport.records);
+  const transferRoutes = getSortedRouteKeys(transferReport.records);
+  const routeSetsMatch = salesRoutes.length === transferRoutes.length
+    && salesRoutes.every((routeKey, index) => routeKey === transferRoutes[index]);
+
+  if (!routeSetsMatch) {
+    throw new PullSheetGenerationError(
+      'ROUTE_MISMATCH',
+      'These Sales and Transfer reports do not appear to belong to the same Descartes route.',
+    );
+  }
+}
+
+function buildDocument(reports: ParsedReport[]): PullSheetDocument {
+  const records = reports.flatMap((report) => report.records);
   const routes = groupBy(records, (record) => record.routeKey);
   const routeSections: PullSheetRouteSection[] = [];
   const palletKeyPages: PalletKeyPage[] = [];
@@ -275,14 +417,19 @@ function buildDocument(records: PullSheetRecord[]): PullSheetDocument {
     const routePalletPages = buildPalletKeyPages(routeKey, routeDisplay, sortedRecords, assignments, stopColorMap);
     const hasKeyColumn = routePalletPages.length > 0;
     const columns = hasKeyColumn ? withKeyColumn(BASE_COLUMNS) : BASE_COLUMNS;
+    const salesLineCount = sortedRecords.filter((record) => record.sourceKind === 'sales').length;
+    const transferLineCount = sortedRecords.length - salesLineCount;
 
     routeSections.push({
       routeKey,
       routeDisplay,
+      truckType: getTruckType(salesLineCount, transferLineCount),
       columns,
       rows: sortedRecords,
       stopCount: stopKeys.length,
       lineCount: sortedRecords.length,
+      salesLineCount,
+      transferLineCount,
       palletKeyPageCount: routePalletPages.length,
       hasKeyColumn,
     });
@@ -290,11 +437,17 @@ function buildDocument(records: PullSheetRecord[]): PullSheetDocument {
     totalStops += stopKeys.length;
   }
 
+  const salesLineCount = records.filter((record) => record.sourceKind === 'sales').length;
+  const transferLineCount = records.length - salesLineCount;
+
   return {
     summary: {
+      reportType: getReportType(salesLineCount, transferLineCount),
       routeCount: routeSections.length,
       stopCount: totalStops,
       productLineCount: records.length,
+      salesLineCount,
+      transferLineCount,
       palletKeyPageCount: palletKeyPages.length,
     },
     routes: routeSections,
@@ -304,7 +457,8 @@ function buildDocument(records: PullSheetRecord[]): PullSheetDocument {
 
 function compareBasePullSheetRecords(left: PullSheetRecord, right: PullSheetRecord): number {
   return compareStopOrder(left, right)
-    || compareNormalStopRows(left, right);
+    || compareSourceKind(left, right)
+    || compareSourceRows(left, right);
 }
 
 function compareFinalPullOrder(
@@ -318,37 +472,59 @@ function compareFinalPullOrder(
     return stopCompare;
   }
 
-  const assignment = assignments.get(`${left.routeKey}|${left.stopKey}`);
+  const sourceCompare = compareSourceKind(left, right);
 
-  if (assignment?.requiresKey) {
-    return compareKeyedStopRows(left, right);
+  if (sourceCompare !== 0) {
+    return sourceCompare;
   }
 
-  return compareNormalStopRows(left, right);
+  if (left.sourceKind === 'sales') {
+    const assignment = assignments.get(`${left.routeKey}|${left.stopKey}`);
+
+    if (assignment?.requiresKey) {
+      return compareKeyedStopRows(left, right);
+    }
+  }
+
+  return compareSourceRows(left, right);
 }
 
 function compareStopOrder(left: PullSheetRecord, right: PullSheetRecord): number {
-  const stopCompare = compareDescendingNullableNumber(left.stopSortValue, right.stopSortValue)
+  return compareDescendingNullableNumber(left.stopSortValue, right.stopSortValue)
     || compareNaturalText(right.stopDisplay, left.stopDisplay);
+}
 
-  return stopCompare;
+function compareSourceKind(left: PullSheetRecord, right: PullSheetRecord): number {
+  if (left.sourceKind === right.sourceKind) {
+    return 0;
+  }
+
+  return left.sourceKind === 'sales' ? -1 : 1;
 }
 
 function compareKeyedStopRows(left: PullSheetRecord, right: PullSheetRecord): number {
   return compareDesignations(left.keyDesignation, right.keyDesignation)
-    || compareNormalStopRows(left, right);
+    || compareSalesRows(left, right);
 }
 
-function compareNormalStopRows(left: PullSheetRecord, right: PullSheetRecord): number {
-  const pickCompare = compareDescendingNullableNumber(left.pickTicketSortValue, right.pickTicketSortValue)
-    || compareNaturalText(right.pickTicketNo, left.pickTicketNo);
+function compareSourceRows(left: PullSheetRecord, right: PullSheetRecord): number {
+  return left.sourceKind === 'transfer'
+    ? compareTransferRows(left, right)
+    : compareSalesRows(left, right);
+}
 
-  if (pickCompare !== 0) {
-    return pickCompare;
-  }
+function compareSalesRows(left: PullSheetRecord, right: PullSheetRecord): number {
+  return compareDescendingNullableNumber(left.documentNumberSortValue, right.documentNumberSortValue)
+    || compareNaturalText(right.documentNumberDisplay, left.documentNumberDisplay)
+    || compareNaturalText(left.dmasPart, right.dmasPart)
+    || left.originalSourceOrder - right.originalSourceOrder;
+}
 
-  return compareNaturalText(left.dmasPart, right.dmasPart)
-    || left.sourceIndex - right.sourceIndex;
+function compareTransferRows(left: PullSheetRecord, right: PullSheetRecord): number {
+  return compareDescendingNullableNumber(left.documentNumberSortValue, right.documentNumberSortValue)
+    || compareNaturalText(right.documentNumberDisplay, left.documentNumberDisplay)
+    || compareNaturalText(left.p21ItemId, right.p21ItemId)
+    || left.originalSourceOrder - right.originalSourceOrder;
 }
 
 function compareDescendingNullableNumber(left: number | null, right: number | null): number {
@@ -379,7 +555,7 @@ function buildStopAssignments(records: PullSheetRecord[]): Map<string, StopAssig
   const seenCustomersByStop = new Map<string, Set<string>>();
 
   for (const record of records) {
-    if (!record.shipToNameKey) {
+    if (record.sourceKind !== 'sales' || !record.shipToNameKey) {
       continue;
     }
 
@@ -425,7 +601,7 @@ function applyStopColorsAndKeys(
     const assignment = assignments.get(stopCustomerKey);
 
     record.stopColorClass = stopColorMap.get(record.stopKey) ?? getStopColorClass(0);
-    record.keyDesignation = assignment?.customerLetters.get(record.shipToNameKey) ?? '';
+    record.keyDesignation = record.sourceKind === 'sales' ? assignment?.customerLetters.get(record.shipToNameKey) ?? '' : '';
     record.keyShadeClass = record.keyDesignation ? getKeyShadeClass(record.keyDesignation) : '';
   }
 }
@@ -433,32 +609,86 @@ function applyStopColorsAndKeys(
 function applyRowGroupMetadata(records: PullSheetRecord[], assignments: Map<string, StopAssignment>): void {
   const seenStops = new Set<string>();
   const seenKeyGroups = new Set<string>();
+  const seenSourceGroups = new Set<string>();
+  const recordsByStop = groupBy(records, (record) => `${record.routeKey}|${record.stopKey}`);
 
   for (const record of records) {
     const stopCustomerKey = `${record.routeKey}|${record.stopKey}`;
     const assignment = assignments.get(stopCustomerKey);
     const keyGroup = `${stopCustomerKey}|${record.keyDesignation}`;
+    const sourceGroup = `${stopCustomerKey}|${record.sourceKind}`;
+    const stopRecords = recordsByStop.get(stopCustomerKey) ?? [];
+    const isMixedStop = stopRecords.some((item) => item.sourceKind === 'sales')
+      && stopRecords.some((item) => item.sourceKind === 'transfer');
 
-    record.isFirstRowForStop = !seenStops.has(record.stopKey);
+    record.isFirstRowForStop = !seenStops.has(stopCustomerKey);
     record.isFirstRowForKeyGroup = Boolean(
       assignment?.requiresKey
       && record.keyDesignation
       && !record.isFirstRowForStop
       && !seenKeyGroups.has(keyGroup),
     );
-    record.stopBanner = record.isFirstRowForStop ? buildStopBanner(record, assignment) : null;
+    record.stopBanner = record.isFirstRowForStop ? buildStopBanner(record, assignment, stopRecords) : null;
+    record.sourceDividerLabel = isMixedStop && !seenSourceGroups.has(sourceGroup)
+      ? buildSourceDividerLabel(record.sourceKind, stopRecords)
+      : '';
 
-    seenStops.add(record.stopKey);
+    seenStops.add(stopCustomerKey);
+    seenSourceGroups.add(sourceGroup);
     if (record.keyDesignation) {
       seenKeyGroups.add(keyGroup);
     }
   }
 }
 
-function buildStopBanner(record: PullSheetRecord, assignment: StopAssignment | undefined): StopBanner {
-  const customerCount = assignment?.customers.length ?? (record.shipToNameKey ? 1 : 0);
-  const firstCustomer = assignment?.customers[0];
+function buildStopBanner(
+  record: PullSheetRecord,
+  assignment: StopAssignment | undefined,
+  stopRecords: PullSheetRecord[],
+): StopBanner {
   const stopColorClass = record.stopColorClass;
+  const hasSales = stopRecords.some((item) => item.sourceKind === 'sales');
+  const hasTransfer = stopRecords.some((item) => item.sourceKind === 'transfer');
+  const customerCount = assignment?.customers.length ?? (record.shipToNameKey ? 1 : 0);
+
+  if (hasSales && hasTransfer && assignment?.requiresKey) {
+    const lastDesignation = getDesignationLetter(customerCount - 1);
+
+    return {
+      stopDisplay: record.stopDisplay,
+      stopColorClass,
+      text: `STOP ${record.stopDisplay} - MIXED SALES / XFER - SALES USE KEY LETTERS A-${lastDesignation} - ${customerCount} SALES CUSTOMERS`,
+      customerCount,
+      isMultiCustomer: true,
+      firstDesignation: 'A',
+      lastDesignation,
+    };
+  }
+
+  if (hasSales && hasTransfer) {
+    return {
+      stopDisplay: record.stopDisplay,
+      stopColorClass,
+      text: `STOP ${record.stopDisplay} - MIXED SALES / XFER STOP`,
+      customerCount,
+      isMultiCustomer: false,
+      firstDesignation: '',
+      lastDesignation: '',
+    };
+  }
+
+  if (hasTransfer) {
+    const destination = getTransferDestinationLabel(stopRecords);
+    return {
+      stopDisplay: record.stopDisplay,
+      stopColorClass,
+      text: `STOP ${record.stopDisplay} - XFER TO ${destination}`,
+      customerCount: 0,
+      isMultiCustomer: false,
+      firstDesignation: '',
+      lastDesignation: '',
+    };
+  }
 
   if (assignment?.requiresKey) {
     const lastDesignation = getDesignationLetter(customerCount - 1);
@@ -474,6 +704,7 @@ function buildStopBanner(record: PullSheetRecord, assignment: StopAssignment | u
     };
   }
 
+  const firstCustomer = assignment?.customers[0];
   const displayName = firstCustomer?.displayName || record.shipToName || 'Customer not listed';
   const city = firstCustomer?.city || record.shipToCity;
   const state = firstCustomer?.state || record.shipToState;
@@ -493,6 +724,36 @@ function buildStopBanner(record: PullSheetRecord, assignment: StopAssignment | u
   };
 }
 
+function buildSourceDividerLabel(sourceKind: ReportKind, stopRecords: PullSheetRecord[]): string {
+  if (sourceKind === 'sales') {
+    return 'SALES ORDERS';
+  }
+
+  return `XFER ITEMS - ${getTransferDestinationLabel(stopRecords)}`;
+}
+
+function getTransferDestinationLabel(records: PullSheetRecord[]): string {
+  const destinations = records
+    .filter((record) => record.sourceKind === 'transfer' && record.transferDestinationKey)
+    .reduce<Map<string, string>>((map, record) => {
+      if (!map.has(record.transferDestinationKey)) {
+        map.set(record.transferDestinationKey, record.transferDestinationName);
+      }
+
+      return map;
+    }, new Map<string, string>());
+
+  if (destinations.size === 0) {
+    return 'Destination not listed';
+  }
+
+  if (destinations.size > 1) {
+    return 'MULTIPLE DESTINATIONS';
+  }
+
+  return [...destinations.values()][0];
+}
+
 function buildPalletKeyPages(
   routeKey: string,
   routeDisplay: string,
@@ -501,7 +762,7 @@ function buildPalletKeyPages(
   stopColorMap: Map<string, string>,
 ): PalletKeyPage[] {
   const pages: PalletKeyPage[] = [];
-  const recordsByStop = groupBy(records, (record) => record.stopKey);
+  const recordsByStop = groupBy(records.filter((record) => record.sourceKind === 'sales'), (record) => record.stopKey);
 
   for (const [stopKey, stopRecords] of recordsByStop) {
     const assignment = assignments.get(`${routeKey}|${stopKey}`);
@@ -534,7 +795,7 @@ function buildPalletKeyPages(
       const entry = entryMap.get(record.shipToNameKey);
 
       if (entry) {
-        pushUnique(entry.pickTicketNumbers, record.pickTicketNo);
+        pushUnique(entry.pickTicketNumbers, record.documentNumberDisplay);
         pushUnique(entry.poNumbers, record.poNo);
       }
     }
@@ -568,6 +829,29 @@ function normalizeRouteKey(routeDisplay: string): string {
 function normalizeStopKey(stopDisplay: string): string {
   const numericStop = parseSortableNumber(stopDisplay);
   return numericStop === null ? normalizeComparableText(stopDisplay) : String(numericStop);
+}
+
+function getTruckType(salesLineCount: number, transferLineCount: number): 'Sales' | 'Xfer' | 'Mixed' {
+  if (salesLineCount > 0 && transferLineCount > 0) {
+    return 'Mixed';
+  }
+
+  return transferLineCount > 0 ? 'Xfer' : 'Sales';
+}
+
+function getReportType(
+  salesLineCount: number,
+  transferLineCount: number,
+): PullSheetDocument['summary']['reportType'] {
+  if (salesLineCount > 0 && transferLineCount > 0) {
+    return 'Mixed Sales / Transfer';
+  }
+
+  return transferLineCount > 0 ? 'Transfer' : 'Sales Order';
+}
+
+function getSortedRouteKeys(records: PullSheetRecord[]): string[] {
+  return [...new Set(records.map((record) => record.routeKey))].sort((left, right) => compareNaturalText(left, right));
 }
 
 function groupBy<T>(items: T[], getKey: (item: T) => string): Map<string, T[]> {

@@ -248,6 +248,16 @@
   print-color-adjust: exact;
 }
 
+.pull-sheet-table .source-divider-cell {
+  padding: 0.14rem 0.28rem;
+  border: 1px solid #000000;
+  background: #f7f7f7;
+  color: #111111;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-align: left;
+}
+
 .stop-color-1 {
   --stop-primary: #236c92;
   --stop-fg: #ffffff;

@@ -10,14 +10,22 @@ const XLSX_ZIP_SIGNATURES = [
 
 export function validateFileSelection(fileList: FileList | File[] | null): ValidationResult {
   if (!fileList || fileList.length === 0) {
-    return { valid: false, errorCode: 'NO_FILE', message: 'No file selected. Choose a P21 Results export to begin.' };
+    return { valid: false, errorCode: 'NO_FILE', message: 'No file selected. Choose a P21 Staging Report to begin.' };
   }
 
-  if (fileList.length > 1) {
-    return { valid: false, errorCode: 'MULTIPLE_FILES', message: 'Select one .xlsx route export at a time.' };
+  if (fileList.length > 2) {
+    return { valid: false, errorCode: 'MULTIPLE_FILES', message: 'Select no more than two .xlsx staging reports at a time.' };
   }
 
-  return validateSelectedFile(fileList[0]);
+  for (const file of Array.from(fileList)) {
+    const validation = validateSelectedFile(file);
+
+    if (!validation.valid) {
+      return validation;
+    }
+  }
+
+  return { valid: true };
 }
 
 export function validateSelectedFile(file: File): ValidationResult {

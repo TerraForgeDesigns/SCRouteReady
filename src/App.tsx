@@ -12,7 +12,7 @@ import { useWorkbookSession } from './hooks/useWorkbookSession';
 export default function App() {
   const {
     appState,
-    metadata,
+    reports,
     error,
     generationError,
     generatedDocument,
@@ -21,6 +21,7 @@ export default function App() {
     clearSession,
     generatePullSheet,
     readSelectedFiles,
+    removeReport,
     setDragging,
   } = useWorkbookSession();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -77,7 +78,7 @@ export default function App() {
           </div>
           <div className="secondary-column">
             <SecurityNotice />
-            <FileStatusPanel metadata={metadata} error={error} generationError={generationError} />
+            <FileStatusPanel reports={reports} error={error} generationError={generationError} onRemoveReport={removeReport} />
           </div>
         </div>
       </main>

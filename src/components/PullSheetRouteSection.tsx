@@ -18,7 +18,7 @@ export function PullSheetRouteSection({ route, isFirst }: PullSheetRouteSectionP
           <p>Route {route.routeDisplay}</p>
         </div>
         <p className="route-summary">
-          {route.stopCount} Stops - {route.lineCount} Lines - {route.palletKeyPageCount} Keys
+          {route.truckType} - {route.stopCount} Stops - {route.lineCount} Lines{route.truckType === 'Mixed' ? ` - ${route.salesLineCount} Sales - ${route.transferLineCount} Xfer` : ''} - {route.palletKeyPageCount} Keys
         </p>
       </header>
       <PullSheetTable route={route} />

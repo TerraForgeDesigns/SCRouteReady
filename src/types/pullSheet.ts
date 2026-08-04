@@ -3,16 +3,22 @@ export type SourceField =
   | 'customerType'
   | 'stopNumber'
   | 'pickTicketNo'
+  | 'assignedStop'
+  | 'transferNo'
   | 'poNo'
   | 'qty'
   | 'uom'
+  | 'unitOfMeasure'
   | 'bin'
+  | 'binCd'
   | 'dmasPart'
   | 'p21ItemId'
+  | 'itemId'
   | 'itemDescription'
   | 'shipToName'
   | 'shipToCity'
-  | 'shipToState';
+  | 'shipToState'
+  | 'toLocationName';
 
 export interface SourceColumnDefinition {
   field: SourceField;
@@ -22,7 +28,9 @@ export interface SourceColumnDefinition {
 }
 
 export interface PullSheetRecord {
+  sourceKind: 'sales' | 'transfer';
   sourceIndex: number;
+  originalSourceOrder: number;
   routeKey: string;
   routeDisplay: string;
   customerType: string;
@@ -31,6 +39,8 @@ export interface PullSheetRecord {
   stopSortValue: number | null;
   pickTicketNo: string;
   pickTicketSortValue: number | null;
+  documentNumberDisplay: string;
+  documentNumberSortValue: number | null;
   poNo: string;
   qty: string;
   uom: string;
@@ -42,12 +52,15 @@ export interface PullSheetRecord {
   shipToNameKey: string;
   shipToCity: string;
   shipToState: string;
+  transferDestinationName: string;
+  transferDestinationKey: string;
   keyDesignation: string;
   keyShadeClass: string;
   stopColorClass: string;
   isFirstRowForStop: boolean;
   isFirstRowForKeyGroup: boolean;
   stopBanner: StopBanner | null;
+  sourceDividerLabel: string;
 }
 
 export interface StopBanner {
@@ -72,10 +85,13 @@ export interface PullSheetColumn {
 export interface PullSheetRouteSection {
   routeKey: string;
   routeDisplay: string;
+  truckType: 'Sales' | 'Xfer' | 'Mixed';
   columns: PullSheetColumn[];
   rows: PullSheetRecord[];
   stopCount: number;
   lineCount: number;
+  salesLineCount: number;
+  transferLineCount: number;
   palletKeyPageCount: number;
   hasKeyColumn: boolean;
 }
@@ -101,9 +117,12 @@ export interface PalletKeyPage {
 }
 
 export interface GenerationSummaryData {
+  reportType: 'Sales Order' | 'Transfer' | 'Mixed Sales / Transfer';
   routeCount: number;
   stopCount: number;
   productLineCount: number;
+  salesLineCount: number;
+  transferLineCount: number;
   palletKeyPageCount: number;
 }
 
@@ -118,6 +137,7 @@ export type GenerationErrorCode =
   | 'RESULTS_WORKSHEET_EMPTY'
   | 'NO_USABLE_DATA_ROWS'
   | 'UNEXPECTED_WORKSHEET_STRUCTURE'
+  | 'ROUTE_MISMATCH'
   | 'TRANSFORMATION_FAILED';
 
 export class PullSheetGenerationError extends Error {

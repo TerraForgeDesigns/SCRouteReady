@@ -2,6 +2,8 @@ export type ApplicationState = 'idle' | 'dragging' | 'reading' | 'ready' | 'gene
 
 export type FutureApplicationState = ApplicationState | 'printing';
 
+export type ReportKind = 'sales' | 'transfer';
+
 export interface WorkbookMetadata {
   originalFileName: string;
   fileSize: number;
@@ -10,6 +12,8 @@ export interface WorkbookMetadata {
   resultsRowCount: number;
   resultsColumnCount: number;
   resultsHeaderNames: string[];
+  routeCount: number;
+  stopCount: number;
 }
 
 export interface ActiveWorkbookSession {
@@ -17,6 +21,7 @@ export interface ActiveWorkbookSession {
   fileName: string;
   workbook: unknown;
   metadata: WorkbookMetadata;
+  reportKind: ReportKind;
 }
 
 export type ValidationErrorCode =
@@ -39,6 +44,9 @@ export type WorkbookReadErrorCode =
   | 'WORKBOOK_HAS_NO_SHEETS'
   | 'RESULTS_SHEET_MISSING'
   | 'RESULTS_SHEET_UNREADABLE'
+  | 'UNSUPPORTED_REPORT'
+  | 'AMBIGUOUS_REPORT'
+  | 'DUPLICATE_REPORT_KIND'
   | 'UNEXPECTED_PARSE_ERROR';
 
 export interface WorkbookReadError {

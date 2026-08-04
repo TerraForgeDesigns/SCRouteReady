@@ -55,22 +55,23 @@ export function FileDropZone({ appState, onFilesSelected, onDragChange, onInputR
         </svg>
       </div>
       <div>
-        <h2 id="drop-zone-title">Drop P21 Route File Here</h2>
-        <p>Drag the exported .xlsx file into this window or choose it from your computer.</p>
+        <h2 id="drop-zone-title">Drop P21 Staging Report(s) Here</h2>
+        <p>Drop a Sales Order report, a Transfer report, or both reports for the same truck.</p>
       </div>
       <label className="file-button">
-        <span>Choose File</span>
+        <span>Choose Report(s)</span>
         <input
           key={inputKey}
           ref={setInputRef}
           type="file"
           accept=".xlsx"
+          multiple
           disabled={isReading}
-          aria-label="Choose P21 Route File"
+          aria-label="Choose P21 Staging Report"
           onChange={(event) => onFilesSelected(event.currentTarget.files)}
         />
       </label>
-      <p className="file-rule">.xlsx files only · Maximum 20 MB</p>
+      <p className="file-rule">.xlsx files only - Maximum 20 MB each</p>
       {isReading ? <p className="reading-indicator">Reading workbook locally...</p> : null}
     </section>
   );

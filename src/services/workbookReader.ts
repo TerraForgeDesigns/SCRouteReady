@@ -1,6 +1,9 @@
 import * as XLSX from 'xlsx';
 import type { ActiveWorkbookSession, WorkbookMetadata, WorkbookReadError } from '../types/workbook';
 import { hasValidXlsxSignature, validateSelectedFile } from '../utils/fileValidation';
+import { normalizeHeader } from '../utils/headerNormalization';
+import { normalizeComparableText, sanitizeDisplayText } from '../utils/sanitizeDisplayText';
+import { detectReportKind } from './reportDetector';
 
 export class WorkbookReaderError extends Error {
   readonly code: WorkbookReadError['code'];
@@ -65,11 +68,23 @@ export async function readWorkbookSession(file: File): Promise<ActiveWorkbookSes
     throw new WorkbookReaderError('RESULTS_SHEET_MISSING', 'This workbook does not contain the expected Results worksheet. Confirm that you selected the P21 route export.');
   }
 
+  const detection = detectReportKind(metadata.resultsHeaderNames);
+
+  if (!detection.ok) {
+    throw new WorkbookReaderError(
+      detection.reason === 'ambiguous' ? 'AMBIGUOUS_REPORT' : 'UNSUPPORTED_REPORT',
+      detection.reason === 'ambiguous'
+        ? 'This workbook matches more than one supported P21 report type, so SCRouteReady stopped safely.'
+        : 'This workbook is not a supported P21 Sales Order or Transfer Staging Report.',
+    );
+  }
+
   return {
     id: crypto.randomUUID(),
     fileName: file.name,
     workbook,
-    metadata,
+    metadata: addReportCounts(metadata, workbook, detection.kind),
+    reportKind: detection.kind,
   };
 }
 
@@ -89,7 +104,63 @@ function getWorkbookMetadata(file: File, workbook: XLSX.WorkBook): WorkbookMetad
     resultsRowCount: Math.max(0, totalUsedRows - 1),
     resultsColumnCount: range ? range.e.c - range.s.c + 1 : 0,
     resultsHeaderNames: headerNames,
+    routeCount: 0,
+    stopCount: 0,
   };
+}
+
+function addReportCounts(metadata: WorkbookMetadata, workbook: XLSX.WorkBook, kind: 'sales' | 'transfer'): WorkbookMetadata {
+  const resultsName = workbook.SheetNames.find((sheetName) => sheetName.toLowerCase() === 'results');
+  const sheet = resultsName ? workbook.Sheets[resultsName] : undefined;
+  const range = sheet?.['!ref'] ? XLSX.utils.decode_range(sheet['!ref']) : null;
+
+  if (!sheet || !range) {
+    return metadata;
+  }
+
+  const headerRow = range.s.r;
+  const routeColumn = findHeaderColumn(sheet, range, 'Route from Descartes');
+  const stopColumn = findHeaderColumn(sheet, range, kind === 'sales' ? 'Stop #' : 'Assigned Stop');
+
+  return {
+    ...metadata,
+    routeCount: countDistinctValues(sheet, range, routeColumn, headerRow),
+    stopCount: countDistinctValues(sheet, range, stopColumn, headerRow),
+  };
+}
+
+function findHeaderColumn(sheet: XLSX.WorkSheet, range: XLSX.Range, headerName: string): number | null {
+  const target = normalizeHeader(headerName);
+
+  for (let column = range.s.c; column <= range.e.c; column += 1) {
+    const cellAddress = XLSX.utils.encode_cell({ r: range.s.r, c: column });
+    const value = sheet[cellAddress]?.v;
+
+    if (normalizeHeader(value) === target) {
+      return column;
+    }
+  }
+
+  return null;
+}
+
+function countDistinctValues(sheet: XLSX.WorkSheet, range: XLSX.Range, column: number | null, headerRow: number): number {
+  if (column === null) {
+    return 0;
+  }
+
+  const values = new Set<string>();
+
+  for (let row = headerRow + 1; row <= range.e.r; row += 1) {
+    const cellAddress = XLSX.utils.encode_cell({ r: row, c: column });
+    const normalized = normalizeComparableText(sanitizeDisplayText(sheet[cellAddress]?.w ?? sheet[cellAddress]?.v ?? ''));
+
+    if (normalized) {
+      values.add(normalized);
+    }
+  }
+
+  return values.size;
 }
 
 function readHeaderNames(sheet: XLSX.WorkSheet, range: XLSX.Range): string[] {

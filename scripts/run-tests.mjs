@@ -1,19 +1,27 @@
-import { mkdir } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
-import { build } from 'esbuild';
+import { resolve } from 'node:path';
 
-await mkdir('.test-dist', { recursive: true });
+const testOutDir = resolve('.test-dist');
 
-await build({
-  entryPoints: ['./tests/pullSheetGenerator.test.ts'],
-  bundle: true,
-  format: 'esm',
-  platform: 'node',
-  outfile: '.test-dist/pullSheetGenerator.test.mjs',
-});
+await rm(testOutDir, { recursive: true, force: true });
+await mkdir(testOutDir, { recursive: true });
+await writeFile(resolve(testOutDir, 'package.json'), '{"type":"commonjs"}\n');
 
-const result = spawnSync(process.execPath, ['--test', '.test-dist/pullSheetGenerator.test.mjs'], {
+const compileResult = spawnSync(process.execPath, [
+  resolve('node_modules/typescript/bin/tsc'),
+  '-p',
+  resolve('tsconfig.test.json'),
+], {
   stdio: 'inherit',
 });
 
-process.exit(result.status ?? 1);
+if (compileResult.status !== 0) {
+  process.exit(compileResult.status ?? 1);
+}
+
+const testResult = spawnSync(process.execPath, ['--test', resolve('.test-dist/tests/pullSheetGenerator.test.js')], {
+  stdio: 'inherit',
+});
+
+process.exit(testResult.status ?? 1);

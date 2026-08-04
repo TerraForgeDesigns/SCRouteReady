@@ -4,17 +4,17 @@ SCRouteReady is currently a static, browser-only proof of concept. It has no bac
 
 ## Local Processing
 
-- The employee deliberately selects a `.xlsx` P21 route export.
-- The browser reads that file with `File.arrayBuffer()`.
+- The employee deliberately selects one or two `.xlsx` P21 staging reports.
+- The browser reads each selected file with `File.arrayBuffer()`.
 - SheetJS parses the workbook locally inside the browser runtime.
-- The original export remains on the employee's computer in its selected location.
-- SCRouteReady does not modify the original workbook.
+- The original exports remain on the employee's computer in their selected locations.
+- SCRouteReady does not modify the original workbooks.
 
 ## No Intentional Retention
 
 The application must not use `localStorage`, `sessionStorage`, `IndexedDB`, Cache Storage, service workers, cookies, analytics, telemetry, tracking pixels, or any route-data recovery feature.
 
-Workbook references are held only in temporary JavaScript memory for the active task. Finish & Clear removes active file, workbook, buffer, metadata, error, and preview references controlled by the application and resets the native file input.
+Workbook references are held only in temporary JavaScript memory for the active task. A mixed Sales / Transfer session may hold up to two workbook references at once. Finish & Clear removes active file, workbook, buffer, report classification, metadata, normalized row, route compatibility, generated Pull Sheet, Pallet Key, error, and preview references controlled by the application and resets the native file input.
 
 Active-session clearing is not a guarantee of cryptographic memory erasure. Browser engines and operating systems control lower-level memory allocation, reuse, and process cleanup.
 

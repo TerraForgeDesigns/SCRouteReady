@@ -5,9 +5,9 @@ interface WorkflowStepsProps {
 }
 
 const steps = [
-  { label: 'Drop File', description: 'Select export' },
+  { label: 'Drop Report(s)', description: 'Select export' },
   { label: 'Pull Sheet + Keys', description: 'Next build' },
-  { label: 'Print', description: 'Future stage' },
+  { label: 'Print', description: 'Final stage' },
 ];
 
 export function WorkflowSteps({ appState }: WorkflowStepsProps) {
