@@ -18,7 +18,7 @@ Drop Report(s) -> Generate Pull Sheet and Keys -> Print -> Finish & Clear
 
 The P21 Excel workbook is the input format. Employees may drop one Sales Order Staging Report, one Transfer Staging Report, or one of each for the same truck. SCRouteReady identifies the report type from the `Results` worksheet headers; no report-type selector, column mapping, or preset is required.
 
-Sales-only trucks use the Sales Order staging columns. Transfer-only trucks use Transfer staging columns and render product rows with the visible Type value `Xfer`. The Pull Sheet `PT/Xfer #` column shows Sales `Pick Ticket No` values for Sales rows and `Transfer No` values for Transfer rows. Mixed Sales / Transfer trucks are merged only when the normalized `Route from Descartes` route set matches across both reports. The output is a temporary browser-rendered HTML document optimized for landscape printing, not a generated Excel workbook. The browser print dialog may allow a user to save as PDF, but SCRouteReady will not automatically create or save PDF files.
+Sales-only trucks use the Sales Order staging columns. Transfer-only trucks use Transfer staging columns and render product rows with the visible Type value `Xfer`. The Pull Sheet `PT/Xfer #` column shows Sales `Pick Ticket No` values for Sales rows and `Transfer No` values for Transfer rows. Mixed Sales / Transfer trucks are grouped by normalized `Route from Descartes` values, and a route may contain Sales rows only, Transfer rows only, or both. `Route Code` is not used for matching, grouping, sorting, or output routing. The output is a temporary browser-rendered HTML document optimized for landscape printing, not a generated Excel workbook. The browser print dialog may allow a user to save as PDF, but SCRouteReady will not automatically create or save PDF files.
 
 ## Local Browser Processing
 
@@ -80,7 +80,7 @@ npm run preview
 - Accepts at most two reports per selection: one Sales Order report and one Transfer report.
 - Requires a worksheet named `Results`, case-insensitive.
 - Pull Sheet generation requires the expected P21 Sales Order or Transfer Staging Report columns.
-- Mixed generation requires the same normalized Descartes route set in both reports.
+- Mixed generation groups rows by `Route from Descartes` and does not require every route to appear in both reports.
 - Browser pagination can vary by printer driver and print-dialog settings.
 - SCRouteReady cannot prevent a user from manually overriding Landscape in the browser print dialog.
 - No Excel output, PDF generation, automatic downloads, backend, cloud storage, or user accounts are implemented.

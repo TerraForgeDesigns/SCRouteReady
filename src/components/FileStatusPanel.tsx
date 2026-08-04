@@ -47,7 +47,7 @@ export function FileStatusPanel({ reports, error, generationError, onRemoveRepor
       <section className="status-panel" aria-labelledby="status-title">
         <p className="status-kicker">Waiting</p>
         <h2 id="status-title">No staging reports selected</h2>
-        <p>Select a Sales Order report, a Transfer report, or both matching reports.</p>
+        <p>Select a Sales Order report, a Transfer report, or both reports for the truck.</p>
       </section>
     );
   }
@@ -102,7 +102,7 @@ function getStatusTitle(reports: ActiveWorkbookSession[]): string {
   const hasTransfer = reports.some((report) => report.reportKind === 'transfer');
 
   if (hasSales && hasTransfer) {
-    return 'Mixed Sales / Transfer route ready';
+    return 'Mixed Sales / Transfer routes ready';
   }
 
   return hasSales ? 'Sales Order report ready' : 'Transfer report ready';
@@ -114,6 +114,6 @@ function getReportLabel(kind: ReportKind): string {
 
 function getAddOtherMessage(kind: ReportKind): string {
   return kind === 'sales'
-    ? 'You may generate now or add the matching Transfer report.'
-    : 'You may generate now or add the matching Sales report.';
+    ? 'You may generate now or add the Transfer report for this truck.'
+    : 'You may generate now or add the Sales report for this truck.';
 }

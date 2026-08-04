@@ -123,6 +123,9 @@ export interface GenerationSummaryData {
   productLineCount: number;
   salesLineCount: number;
   transferLineCount: number;
+  mixedRouteCount: number;
+  salesOnlyRouteCount: number;
+  transferOnlyRouteCount: number;
   palletKeyPageCount: number;
 }
 
@@ -137,7 +140,7 @@ export type GenerationErrorCode =
   | 'RESULTS_WORKSHEET_EMPTY'
   | 'NO_USABLE_DATA_ROWS'
   | 'UNEXPECTED_WORKSHEET_STRUCTURE'
-  | 'ROUTE_MISMATCH'
+  | 'MISSING_ROUTE_FROM_DESCARTES'
   | 'TRANSFORMATION_FAILED';
 
 export class PullSheetGenerationError extends Error {

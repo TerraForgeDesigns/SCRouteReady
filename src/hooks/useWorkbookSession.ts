@@ -96,8 +96,8 @@ export function useWorkbookSession() {
         throw new WorkbookReaderError(
           'DUPLICATE_REPORT_KIND',
           duplicateKind === 'sales'
-            ? 'Two Sales Order reports were selected. Choose one Sales report and, if needed, one matching Transfer report.'
-            : 'Two Transfer reports were selected. Choose one Transfer report and, if needed, one matching Sales report.',
+            ? 'Two Sales Order reports were selected. Choose one Sales report and, if needed, one Transfer report for the truck.'
+            : 'Two Transfer reports were selected. Choose one Transfer report and, if needed, one Sales report for the truck.',
         );
       }
 
@@ -243,14 +243,14 @@ function getReadyAnnouncement(sessions: ActiveWorkbookSession[]): string {
   const hasTransfer = sessions.some((session) => session.reportKind === 'transfer');
 
   if (hasSales && hasTransfer) {
-    return 'Mixed Sales / Transfer route ready. Generate Pull Sheet is available.';
+    return 'Mixed Sales / Transfer routes ready. Generate Pull Sheet is available.';
   }
 
   if (hasSales) {
-    return 'Sales Order report ready. You may generate now or add the matching Transfer report.';
+    return 'Sales Order report ready. You may generate now or add the Transfer report for this truck.';
   }
 
-  return 'Transfer report ready. You may generate now or add the matching Sales report.';
+  return 'Transfer report ready. You may generate now or add the Sales report for this truck.';
 }
 
 function normalizeWorkbookError(error: unknown): WorkbookReadError {

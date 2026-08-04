@@ -114,7 +114,6 @@ export function generatePullSheetDocumentFromSessions(sessions: readonly ActiveW
   }
 
   const reports = sessions.map((session) => readReport(session.workbook, session.reportKind));
-  validateRouteCompatibility(reports);
   return buildDocument(reports);
 }
 
@@ -129,6 +128,8 @@ function readReport(workbook: unknown, kind: ReportKind): ParsedReport {
   if (usableRecords.length === 0) {
     throw new PullSheetGenerationError('NO_USABLE_DATA_ROWS', 'The Results worksheet does not contain usable data rows.');
   }
+
+  validateRouteValues(usableRecords);
 
   return { kind, records: usableRecords };
 }
@@ -370,31 +371,6 @@ function hasUsableData(record: PullSheetRecord): boolean {
   ].some((value) => value.length > 0);
 }
 
-function validateRouteCompatibility(reports: ParsedReport[]): void {
-  if (reports.length !== 2) {
-    return;
-  }
-
-  const salesReport = reports.find((report) => report.kind === 'sales');
-  const transferReport = reports.find((report) => report.kind === 'transfer');
-
-  if (!salesReport || !transferReport) {
-    return;
-  }
-
-  const salesRoutes = getSortedRouteKeys(salesReport.records);
-  const transferRoutes = getSortedRouteKeys(transferReport.records);
-  const routeSetsMatch = salesRoutes.length === transferRoutes.length
-    && salesRoutes.every((routeKey, index) => routeKey === transferRoutes[index]);
-
-  if (!routeSetsMatch) {
-    throw new PullSheetGenerationError(
-      'ROUTE_MISMATCH',
-      'These Sales and Transfer reports do not appear to belong to the same Descartes route.',
-    );
-  }
-}
-
 function buildDocument(reports: ParsedReport[]): PullSheetDocument {
   const records = reports.flatMap((report) => report.records);
   const routes = groupBy(records, (record) => record.routeKey);
@@ -439,6 +415,7 @@ function buildDocument(reports: ParsedReport[]): PullSheetDocument {
 
   const salesLineCount = records.filter((record) => record.sourceKind === 'sales').length;
   const transferLineCount = records.length - salesLineCount;
+  const routeMixCounts = getRouteMixCounts(routeSections);
 
   return {
     summary: {
@@ -448,11 +425,30 @@ function buildDocument(reports: ParsedReport[]): PullSheetDocument {
       productLineCount: records.length,
       salesLineCount,
       transferLineCount,
+      mixedRouteCount: routeMixCounts.mixed,
+      salesOnlyRouteCount: routeMixCounts.salesOnly,
+      transferOnlyRouteCount: routeMixCounts.transferOnly,
       palletKeyPageCount: palletKeyPages.length,
     },
     routes: routeSections,
     palletKeyPages,
   };
+}
+
+function validateRouteValues(records: PullSheetRecord[]): void {
+  const rowsWithMissingRoutes = records
+    .filter((record) => !record.routeKey)
+    .map((record) => record.sourceIndex + 2);
+
+  if (rowsWithMissingRoutes.length === 0) {
+    return;
+  }
+
+  throw new PullSheetGenerationError(
+    'MISSING_ROUTE_FROM_DESCARTES',
+    `Route from Descartes is required for every usable row. Missing value on row${rowsWithMissingRoutes.length === 1 ? '' : 's'} ${rowsWithMissingRoutes.join(', ')}.`,
+    ['Route from Descartes'],
+  );
 }
 
 function compareBasePullSheetRecords(left: PullSheetRecord, right: PullSheetRecord): number {
@@ -823,7 +819,7 @@ function withKeyColumn(columns: PullSheetColumn[]): PullSheetColumn[] {
 }
 
 function normalizeRouteKey(routeDisplay: string): string {
-  return normalizeComparableText(routeDisplay) || '(blank route)';
+  return normalizeComparableText(routeDisplay);
 }
 
 function normalizeStopKey(stopDisplay: string): string {
@@ -850,8 +846,25 @@ function getReportType(
   return transferLineCount > 0 ? 'Transfer' : 'Sales Order';
 }
 
-function getSortedRouteKeys(records: PullSheetRecord[]): string[] {
-  return [...new Set(records.map((record) => record.routeKey))].sort((left, right) => compareNaturalText(left, right));
+function getRouteMixCounts(routeSections: PullSheetRouteSection[]): {
+  mixed: number;
+  salesOnly: number;
+  transferOnly: number;
+} {
+  return routeSections.reduce(
+    (counts, route) => {
+      if (route.salesLineCount > 0 && route.transferLineCount > 0) {
+        counts.mixed += 1;
+      } else if (route.salesLineCount > 0) {
+        counts.salesOnly += 1;
+      } else {
+        counts.transferOnly += 1;
+      }
+
+      return counts;
+    },
+    { mixed: 0, salesOnly: 0, transferOnly: 0 },
+  );
 }
 
 function groupBy<T>(items: T[], getKey: (item: T) => string): Map<string, T[]> {

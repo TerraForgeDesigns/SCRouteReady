@@ -504,14 +504,124 @@ test('keyed sales stop with transfer rows keeps sales ABC mappings only', () => 
   );
 });
 
-test('route mismatch blocks mixed generation', () => {
-  assert.throws(
-    () => generatePullSheetDocumentFromSessions([
-      createSession('sales', createWorkbook([createRow({ 'Route from Descartes': 'Route 100' })])),
-      createSession('transfer', createTransferWorkbook([createTransferRow({ 'Route from Descartes': 'Route 200' })])),
-    ]),
-    /same Descartes route/,
-  );
+test('one Sales Order route plus one matching Transfer route keeps original mixed workflow', () => {
+  const document = generatePullSheetDocumentFromSessions([
+    createSession('sales', createWorkbook([
+      createRow({ 'Route from Descartes': 'Route 100', 'Stop #': '06', 'Pick Ticket No': '300' }),
+    ])),
+    createSession('transfer', createTransferWorkbook([
+      createTransferRow({ 'Route from Descartes': 'Route 100', 'Assigned Stop': '06', 'Transfer No': '400' }),
+    ])),
+  ]);
+
+  assert.equal(document.summary.routeCount, 1);
+  assert.equal(document.summary.mixedRouteCount, 1);
+  assert.equal(document.summary.salesOnlyRouteCount, 0);
+  assert.equal(document.summary.transferOnlyRouteCount, 0);
+  assert.equal(document.routes[0].truckType, 'Mixed');
+  assert.deepEqual(document.routes[0].rows.map((row) => row.sourceKind), ['sales', 'transfer']);
+});
+
+test('multiple Sales Order routes plus one matching Transfer route leaves unmatched sales routes valid', () => {
+  const document = generatePullSheetDocumentFromSessions([
+    createSession('sales', createWorkbook([
+      createRow({ 'Route from Descartes': 'ag1-080526-9792', 'Stop #': '01', 'Pick Ticket No': '101' }),
+      createRow({ 'Route from Descartes': 'ag2-080526-9792', 'Stop #': '02', 'Pick Ticket No': '201' }),
+      createRow({ 'Route from Descartes': 'ag3-080526-9792', 'Stop #': '03', 'Pick Ticket No': '301' }),
+    ])),
+    createSession('transfer', createTransferWorkbook([
+      createTransferRow({ 'Route from Descartes': 'ag1-080526-9792', 'Assigned Stop': '01', 'Transfer No': '901' }),
+    ])),
+  ]);
+
+  assert.equal(document.summary.routeCount, 3);
+  assert.equal(document.summary.salesLineCount, 3);
+  assert.equal(document.summary.transferLineCount, 1);
+  assert.equal(document.summary.mixedRouteCount, 1);
+  assert.equal(document.summary.salesOnlyRouteCount, 2);
+  assert.equal(document.summary.transferOnlyRouteCount, 0);
+  assert.deepEqual(document.routes.map((route) => route.routeDisplay), [
+    'ag1-080526-9792',
+    'ag2-080526-9792',
+    'ag3-080526-9792',
+  ]);
+  assert.deepEqual(document.routes.map((route) => route.truckType), ['Mixed', 'Sales', 'Sales']);
+});
+
+test('multiple Sales Order routes plus transfers for only some routes group independently', () => {
+  const document = generatePullSheetDocumentFromSessions([
+    createSession('sales', createWorkbook([
+      createRow({ 'Route from Descartes': 'Route 100', 'Stop #': '01', 'Pick Ticket No': '101' }),
+      createRow({ 'Route from Descartes': 'Route 200', 'Stop #': '02', 'Pick Ticket No': '201' }),
+      createRow({ 'Route from Descartes': 'Route 300', 'Stop #': '03', 'Pick Ticket No': '301' }),
+    ])),
+    createSession('transfer', createTransferWorkbook([
+      createTransferRow({ 'Route from Descartes': 'Route 100', 'Assigned Stop': '01', 'Transfer No': '901' }),
+      createTransferRow({ 'Route from Descartes': 'Route 300', 'Assigned Stop': '03', 'Transfer No': '903' }),
+    ])),
+  ]);
+
+  assert.equal(document.summary.routeCount, 3);
+  assert.equal(document.summary.mixedRouteCount, 2);
+  assert.equal(document.summary.salesOnlyRouteCount, 1);
+  assert.equal(document.summary.transferOnlyRouteCount, 0);
+  assert.deepEqual(document.routes.map((route) => `${route.routeDisplay}:${route.truckType}`), [
+    'Route 100:Mixed',
+    'Route 200:Sales',
+    'Route 300:Mixed',
+  ]);
+});
+
+test('route containing Sales Order rows only is valid in mixed processing', () => {
+  const document = generatePullSheetDocumentFromSessions([
+    createSession('sales', createWorkbook([
+      createRow({ 'Route from Descartes': 'Route 100' }),
+    ])),
+    createSession('transfer', createTransferWorkbook([
+      createTransferRow({ 'Route from Descartes': 'Route 200' }),
+    ])),
+  ]);
+
+  const salesOnlyRoute = document.routes.find((route) => route.routeDisplay === 'Route 100');
+
+  assert.equal(document.summary.salesOnlyRouteCount, 1);
+  assert.equal(salesOnlyRoute?.truckType, 'Sales');
+  assert.equal(salesOnlyRoute?.salesLineCount, 1);
+  assert.equal(salesOnlyRoute?.transferLineCount, 0);
+});
+
+test('route containing Transfer rows only is valid in mixed processing', () => {
+  const document = generatePullSheetDocumentFromSessions([
+    createSession('sales', createWorkbook([
+      createRow({ 'Route from Descartes': 'Route 100' }),
+    ])),
+    createSession('transfer', createTransferWorkbook([
+      createTransferRow({ 'Route from Descartes': 'Route 200' }),
+    ])),
+  ]);
+
+  const transferOnlyRoute = document.routes.find((route) => route.routeDisplay === 'Route 200');
+
+  assert.equal(document.summary.transferOnlyRouteCount, 1);
+  assert.equal(transferOnlyRoute?.truckType, 'Xfer');
+  assert.equal(transferOnlyRoute?.salesLineCount, 0);
+  assert.equal(transferOnlyRoute?.transferLineCount, 1);
+});
+
+test('different Route Code values have no effect on route grouping', () => {
+  const document = generatePullSheetDocumentFromSessions([
+    createSession('sales', createWorkbook([
+      createRow({ 'Route from Descartes': 'Route 100', 'Route Code': 'SALES-A', 'Stop #': '05' }),
+    ])),
+    createSession('transfer', createTransferWorkbook([
+      createTransferRow({ 'Route from Descartes': 'Route 100', 'Route Code': 'TRANSFER-Z', 'Assigned Stop': '05' }),
+    ])),
+  ]);
+
+  assert.equal(document.summary.routeCount, 1);
+  assert.equal(document.summary.mixedRouteCount, 1);
+  assert.equal(document.routes[0].truckType, 'Mixed');
+  assert.deepEqual(document.routes[0].rows.map((row) => row.sourceKind), ['sales', 'transfer']);
 });
 
 test('route normalization allows harmless case and spacing differences', () => {
@@ -521,6 +631,45 @@ test('route normalization allows harmless case and spacing differences', () => {
   ]);
 
   assert.equal(document.summary.productLineCount, 2);
+  assert.equal(document.summary.routeCount, 1);
+});
+
+test('Route from Descartes values with surrounding whitespace group with trimmed matches', () => {
+  const document = generatePullSheetDocumentFromSessions([
+    createSession('sales', createWorkbook([createRow({ 'Route from Descartes': ' Route 100 ', 'Stop #': '06' })])),
+    createSession('transfer', createTransferWorkbook([createTransferRow({ 'Route from Descartes': 'Route 100', 'Assigned Stop': '06' })])),
+  ]);
+
+  assert.equal(document.summary.routeCount, 1);
+  assert.equal(document.routes[0].routeDisplay, 'Route 100');
+  assert.deepEqual(document.routes[0].rows.map((row) => row.sourceKind), ['sales', 'transfer']);
+});
+
+test('blank Route from Descartes values stop generation with a clear message', () => {
+  assert.throws(
+    () => generatePullSheetDocument(createWorkbook([createRow({ 'Route from Descartes': '   ' })])),
+    /Route from Descartes is required.*row 2/,
+  );
+});
+
+test('duplicate rows are preserved during multi-route grouping', () => {
+  const document = generatePullSheetDocumentFromSessions([
+    createSession('sales', createWorkbook([
+      createRow({ 'Route from Descartes': 'Route 100', 'Pick Ticket No': '100', 'DMAS Part#': 'A2' }),
+      createRow({ 'Route from Descartes': 'Route 100', 'Pick Ticket No': '100', 'DMAS Part#': 'A2' }),
+      createRow({ 'Route from Descartes': 'Route 200', 'Pick Ticket No': '200', 'DMAS Part#': 'B2' }),
+    ])),
+    createSession('transfer', createTransferWorkbook([
+      createTransferRow({ 'Route from Descartes': 'Route 100', 'Transfer No': '900', 'Item Id': 'T1' }),
+    ])),
+  ]);
+
+  const route100Rows = document.routes.find((route) => route.routeDisplay === 'Route 100')?.rows ?? [];
+
+  assert.equal(document.summary.productLineCount, 4);
+  assert.equal(route100Rows.length, 3);
+  assert.equal(route100Rows.filter((row) => row.sourceKind === 'sales' && row.documentNumberDisplay === '100').length, 2);
+  assert.equal(new Set(document.routes.flatMap((route) => route.rows.map((row) => `${row.sourceKind}-${row.sourceIndex}`))).size, 4);
 });
 
 test('transfer sorting uses transfer number, natural item id, and source order', () => {

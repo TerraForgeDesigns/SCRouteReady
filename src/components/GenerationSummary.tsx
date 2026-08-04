@@ -36,6 +36,18 @@ export function GenerationSummary({ summary }: GenerationSummaryProps) {
         </div>
       ) : null}
       <div>
+        <span>{summary.mixedRouteCount}</span>
+        <strong>Routes with both</strong>
+      </div>
+      <div>
+        <span>{summary.salesOnlyRouteCount}</span>
+        <strong>Sales-only routes</strong>
+      </div>
+      <div>
+        <span>{summary.transferOnlyRouteCount}</span>
+        <strong>Xfer-only routes</strong>
+      </div>
+      <div>
         <span>{summary.palletKeyPageCount}</span>
         <strong>ABC Pallet Keys</strong>
       </div>
