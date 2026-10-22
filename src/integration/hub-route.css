@@ -1,0 +1,12 @@
+.hub-route .route-archive-ui{font-family:Inter,"Segoe UI Variable",system-ui,sans-serif;color:#0f1714;font-size:14px;line-height:1.5}
+.hub-route-context{display:flex;gap:24px;align-items:center;flex-wrap:wrap;padding:16px 24px;background:#eceeea;border-bottom:1px solid #e3e6e1}
+.hub-route .archive-panel{margin:24px 0;padding:24px;background:white;border:1px solid #e3e6e1;border-radius:20px;box-shadow:0 8px 24px -6px #0f171414}
+.hub-route .archive-panel h2{font-size:18px;margin:0 0 8px;font-weight:650}.hub-route .archive-panel p{overflow-wrap:anywhere}
+.hub-route .archive-search,.hub-route .archive-fields{display:flex;gap:16px;flex-wrap:wrap;align-items:end}.hub-route .archive-fields{padding:16px 0;border:0}
+.hub-route .archive-panel label{display:flex;flex-direction:column;gap:8px;flex:1 1 180px}.hub-route .archive-panel input,.hub-route .archive-panel select{font:inherit;min-height:44px;border:1px solid #c6cdc8;border-radius:10px;padding:8px;min-width:0;width:100%}
+.hub-route .archive-panel button{min-height:44px;border-radius:10px;border:1px solid #c6cdc8;background:#1b6a4b;color:white;transform:none;margin:8px 8px 8px 0}.hub-route .archive-panel button:disabled{background:#eef1ef;color:#66716b}
+.hub-route .route-archive-ui :focus-visible{outline:3px solid #886216;outline-offset:3px}.hub-route .route-archive-ui a{color:#3730a3;font-weight:650}
+.hub-route .archive-list{padding:0;list-style:none}.hub-route .archive-list li{display:flex;justify-content:space-between;gap:24px;padding:16px 0;border-bottom:1px solid #e3e6e1;overflow-wrap:anywhere}.hub-route .archive-list li>div{min-width:0}.hub-route .archive-list a{flex-shrink:0;min-height:44px}
+.hub-route .archive-panel details{margin-top:24px}.hub-route .archive-panel summary{cursor:pointer;min-height:44px;color:#3730a3;font-weight:650}.hub-route [role=alert]{color:#8b3524}.hub-route [role=status]{color:#145238}
+@media(max-width:600px){.hub-route .archive-panel{padding:16px}.hub-route .archive-list li{flex-direction:column;gap:8px}.hub-route .archive-panel input,.hub-route .archive-panel select{font-size:16px}.hub-route-context{gap:8px;padding:16px}}
+@media print{.route-archive-ui{display:none!important}}

@@ -46,3 +46,6 @@ desktop.ini
 # Local editor state
 .vscode/settings.json
 .vscode/*.log
+
+# Separate Hub build; standalone dist stays unchanged
+dist-hub/

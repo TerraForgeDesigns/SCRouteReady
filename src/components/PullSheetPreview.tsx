@@ -1,4 +1,4 @@
-import { forwardRef } from 'react';
+import { forwardRef, type Ref } from 'react';
 import type { PullSheetDocument } from '../types/pullSheet';
 import { GenerationSummary } from './GenerationSummary';
 import { PalletKeyPage } from './PalletKeyPage';
@@ -6,10 +6,11 @@ import { PullSheetRouteSection } from './PullSheetRouteSection';
 
 interface PullSheetPreviewProps {
   document: PullSheetDocument;
+  printOutputRef?: Ref<HTMLDivElement>;
 }
 
 export const PullSheetPreview = forwardRef<HTMLHeadingElement, PullSheetPreviewProps>(
-  function PullSheetPreview({ document }, ref) {
+  function PullSheetPreview({ document, printOutputRef }, ref) {
     return (
       <section className="preview-shell" aria-labelledby="preview-heading">
         <div className="preview-toolbar">
@@ -19,7 +20,7 @@ export const PullSheetPreview = forwardRef<HTMLHeadingElement, PullSheetPreviewP
           </div>
         </div>
         <GenerationSummary summary={document.summary} />
-        <div className="print-document" aria-label="Generated print document">
+        <div ref={printOutputRef} className="print-document" aria-label="Generated print document">
           {document.routes.map((route, index) => (
             <PullSheetRouteSection route={route} isFirst={index === 0} key={route.routeKey} />
           ))}

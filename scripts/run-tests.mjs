@@ -20,7 +20,7 @@ if (compileResult.status !== 0) {
   process.exit(compileResult.status ?? 1);
 }
 
-const testResult = spawnSync(process.execPath, ['--test', resolve('.test-dist/tests/pullSheetGenerator.test.js')], {
+const testResult = spawnSync(process.execPath, ['--test', resolve('.test-dist/tests/pullSheetGenerator.test.js'), resolve('.test-dist/tests/archiveIntegration.test.js')], {
   stdio: 'inherit',
 });
 

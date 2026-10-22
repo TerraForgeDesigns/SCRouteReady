@@ -1,4 +1,4 @@
-export function SecurityNotice() {
+export function SecurityNotice({ archiveEnabled = false }: { archiveEnabled?: boolean }) {
   return (
     <aside className="security-notice" aria-labelledby="security-title">
       <div className="notice-icon" aria-hidden="true">
@@ -9,7 +9,7 @@ export function SecurityNotice() {
       </div>
       <div>
         <h2 id="security-title">Your route file is processed only in this browser.</h2>
-        <p>Nothing is transmitted or intentionally stored. Finishing the task or closing the page clears the active working session.</p>
+        <p>{archiveEnabled ? 'P21 workbooks stay in this browser. Generated pull sheets are automatically copied to the private facility archive. Printing remains independent; save status is shown separately.' : 'Nothing is transmitted or intentionally stored. Finishing the task or closing the page clears the active working session.'}</p>
       </div>
     </aside>
   );

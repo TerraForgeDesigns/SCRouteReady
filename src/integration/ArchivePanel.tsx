@@ -1,0 +1,25 @@
+import { useEffect, useState, useRef, type FormEvent } from 'react';
+import { ArchiveClient, type ArchivePage, type RouteContext } from './archiveClient';
+import { GenerationArchiver, type ArchiveJob } from './generatedArtifact';
+export function ArchivePanel({client,context,archiver}:{client:ArchiveClient;context:RouteContext;archiver:GenerationArchiver}){
+ const [jobs,setJobs]=useState<ArchiveJob[]>(()=>archiver.jobs());
+ const [period,setPeriod]=useState<'recent'|'archive'>('recent'),[query,setQuery]=useState(''),[search,setSearch]=useState(''),[selected,setSelected]=useState<string|null>(null),[refresh,setRefresh]=useState(0);
+ const listEpoch=useRef(0),docEpoch=useRef(0),savedCount=useRef(archiver.jobs().filter(job=>job.status==='Saved').length);
+ const [dates,setDates]=useState<{date:string;count:number}[]>([]),[dateCursor,setDateCursor]=useState<string|null>(null),[page,setPage]=useState<ArchivePage|null>(null),[error,setError]=useState(''),[loading,setLoading]=useState(false);
+ useEffect(()=>archiver.subscribe(()=>{const current=archiver.jobs();setJobs(current);const saved=current.filter(job=>job.status==='Saved').length;if(saved>savedCount.current)setRefresh(value=>value+1);savedCount.current=saved;}),[archiver]);
+ useEffect(()=>{let active=true;++listEpoch.current;setLoading(true);setError('');setDates([]);
+ client.dates(period,search).then(result=>{if(active){setDates(result.dates);setDateCursor(result.next);}}).catch(error=>{if(active){setDates([]);setError(error.message);}}).finally(()=>{if(active)setLoading(false);});return()=>{active=false;};},[client,period,search,refresh]);
+ useEffect(()=>{++docEpoch.current;if(!selected)return;let active=true;setLoading(true);setError('');setPage(null);client.documents(period,selected,search).then(value=>{if(active)setPage(value);}).catch(error=>{if(active)setError(error.message);}).finally(()=>{if(active)setLoading(false);});return()=>{active=false;};},[client,period,selected,search,refresh]);
+ async function moreDates(){if(!dateCursor)return;const epoch=listEpoch.current;try{const result=await client.dates(period,search,dateCursor);if(epoch===listEpoch.current){setDates(old=>[...old,...result.dates]);setDateCursor(result.next);}}catch(error){setError((error as Error).message);}}
+ async function moreDocuments(){if(!page?.next||!selected)return;const epoch=docEpoch.current;try{const result=await client.documents(period,selected,search,page.next);if(epoch===docEpoch.current)setPage({...result,pullSheets:[...page.pullSheets,...result.pullSheets]});}catch(error){setError((error as Error).message);}}
+ function filter(event:FormEvent){event.preventDefault();setSelected(null);setPage(null);setSearch(query);setRefresh(value=>value+1);}
+ return <section className="route-archive-ui archive-panel" aria-label="Pull sheet archive"><h2>Recent Pull Sheets</h2><p>{context.facility.name} - choose a saved date (UTC), then a pull sheet to open and print.</p>
+  {jobs.map(job=><div key={job.id} className="archive-save-status"><strong>{job.routeIds.join(', ')}: {job.status}</strong>{job.status==='Not saved'&&<><p role="alert">Not saved. {job.error} Printing is still available.</p><button type="button" onClick={()=>void archiver.retry(job)}>Retry save</button></>}{job.status==='Saving'&&<p role="status">Saving in the background. Printing is available.</p>}</div>)}
+  {!context.archiveAvailable&&<p role="alert">Private archive storage is unavailable. Generated sheets will show Not saved; printing remains available.</p>}
+  <form className="archive-search" onSubmit={filter}><label>History period<select value={period} onChange={event=>{setSelected(null);setPage(null);setPeriod(event.target.value as 'recent'|'archive');}}><option value="recent">Recent - past 30 days</option><option value="archive">Archive - older pull sheets</option></select></label><label>Optional search<input value={query} maxLength={100} onChange={event=>setQuery(event.target.value)}/></label><button type="submit">Search / Refresh</button></form>
+  {loading&&<p role="status">Loading saved pull sheets...</p>}{error&&<p role="alert">{error}</p>}
+  <div className="archive-dates" aria-label="Saved pull sheet dates">{dates.map(day=><button type="button" key={day.date} aria-pressed={selected===day.date} onClick={()=>setSelected(day.date)}>{day.date} ({day.count})</button>)}</div>
+  {!loading&&!error&&!dates.length&&<p>No saved dates match this view.</p>}{dateCursor&&<button type="button" onClick={()=>void moreDates()}>More dates</button>}
+  {selected&&<h3>Pull sheets for {selected}</h3>}<ul className="archive-list">{page?.pullSheets.map(report=><li key={report.id}><div><strong>{report.routeIds.join(', ')}</strong><p>{report.creator.name} | {new Date(report.createdAt).toLocaleString()}</p>{report.trailer&&<p>Trailer: {report.trailer}</p>}</div><a href={report.format==='pdf'?client.pdfUrl(report.id):client.artifactUrl(report.id)} target="_blank" rel="noopener noreferrer">Open / Print pull sheet</a></li>)}</ul>{page?.next&&<button type="button" onClick={()=>void moreDocuments()}>More pull sheets</button>}
+ </section>;
+}

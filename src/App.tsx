@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import type { PullSheetDocument } from './types/pullSheet';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ActionBar } from './components/ActionBar';
 import { AppHeader } from './components/AppHeader';
 import { FileDropZone } from './components/FileDropZone';
@@ -9,7 +10,7 @@ import { StatusMessage } from './components/StatusMessage';
 import { WorkflowSteps } from './components/WorkflowSteps';
 import { useWorkbookSession } from './hooks/useWorkbookSession';
 
-export default function App() {
+export default function App({ renderArchive, onGenerated }: { renderArchive?: (document: PullSheetDocument | null) => ReactNode; onGenerated?: (document:PullSheetDocument,markup:string)=>void } = {}) {
   const {
     appState,
     reports,
@@ -26,6 +27,7 @@ export default function App() {
   } = useWorkbookSession();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const previewHeadingRef = useRef<HTMLHeadingElement | null>(null);
+  const printOutputRef = useRef<HTMLDivElement | null>(null);
   const [inputKey, setInputKey] = useState(0);
 
   useEffect(() => {
@@ -34,6 +36,10 @@ export default function App() {
       previewHeadingRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   }, [generatedDocument]);
+
+  useEffect(() => {
+    if (generatedDocument && printOutputRef.current && onGenerated) onGenerated(generatedDocument,printOutputRef.current.outerHTML);
+  }, [generatedDocument,onGenerated]);
 
   function handleClear() {
     clearSession();
@@ -74,10 +80,11 @@ export default function App() {
               onPrint={handlePrint}
               onClear={handleClear}
             />
-            {generatedDocument ? <PullSheetPreview document={generatedDocument} ref={previewHeadingRef} /> : null}
+            {renderArchive?.(generatedDocument)}
+            {generatedDocument ? <PullSheetPreview document={generatedDocument} printOutputRef={printOutputRef} ref={previewHeadingRef} /> : null}
           </div>
           <div className="secondary-column">
-            <SecurityNotice />
+            <SecurityNotice archiveEnabled={!!renderArchive} />
             <FileStatusPanel reports={reports} error={error} generationError={generationError} onRemoveReport={removeReport} />
           </div>
         </div>
