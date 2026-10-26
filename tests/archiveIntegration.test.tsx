@@ -51,3 +51,11 @@ test('the archive client uses stable artifact IDs, authenticated date-first list
  await client.dates('recent');await client.documents('recent','2026-10-21');assert.equal(calls[3].url.includes('/pull-sheet-dates?'),true);assert.equal(calls[4].url.includes('date=2026-10-21'),true);
  assert.equal(facilityBase('/routes/facilities/f/'),'/routes/facilities/f/api');assert.throws(()=>facilityBase('/?facilityId=f'));
 });
+
+test('saves explicit integrated operational metadata without changing generated routes or print markup',async()=>{
+ const {document,markup}=generated(),operations={preparationDate:'2026-10-25',shippingDate:'2026-10-26',trailer:'DEV-TRAILER'};
+ const captured:GeneratedArtifact[]=[];const archiver=new GenerationArchiver(async artifact=>{captured.push(artifact);return {saved:true};},assets);
+ const job=archiver.generated(document,markup,operations);operations.shippingDate='2026-12-31';await archiver.retry(job);
+ assert.equal(job.status,'Saved');assert.equal(captured[0].metadata.preparationDate,'2026-10-25');assert.equal(captured[0].metadata.shippingDate,'2026-10-26');assert.equal(captured[0].metadata.trailer,'DEV-TRAILER');
+ const plain=captureGeneratedArtifact(document,markup,assets);assert.equal(plain.html,captured[0].html);assert.equal(plain.metadata.shippingDate,null);assert.deepEqual(plain.metadata.routeIds,captured[0].metadata.routeIds);
+});
