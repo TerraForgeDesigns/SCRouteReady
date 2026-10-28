@@ -59,3 +59,11 @@ test('saves explicit integrated operational metadata without changing generated 
  assert.equal(job.status,'Saved');assert.equal(captured[0].metadata.preparationDate,'2026-10-25');assert.equal(captured[0].metadata.shippingDate,'2026-10-26');assert.equal(captured[0].metadata.trailer,'DEV-TRAILER');
  const plain=captureGeneratedArtifact(document,markup,assets);assert.equal(plain.html,captured[0].html);assert.equal(plain.metadata.shippingDate,null);assert.deepEqual(plain.metadata.routeIds,captured[0].metadata.routeIds);
 });
+
+test('shows actionable assignment failure while preserving printing when central archival fails',async()=>{
+ const {document,markup}=generated();const archiver=new GenerationArchiver(async()=>{throw new Error('Private storage is unavailable.');},assets);
+ const job=archiver.generated(document,markup);await archiver.retry(job);assert.equal(job.status,'Not saved');
+ const html=renderToStaticMarkup(<ArchivePanel client={new ArchiveClient('/routes/facilities/f/api')} context={{facility:{id:'f',name:'Review DC'},creator:{id:'coordinator',name:'Coordinator'},role:'DC_COORDINATOR',csrfToken:'fixture',archiveAvailable:true}} archiver={archiver}/>);
+ for(const text of ['Not available for WarehouseReady assignment','Private storage is unavailable','Retry save','Printing is still available'])assert.equal(html.includes(text),true);
+ assert.equal(html.includes(': Saved'),false);
+});
